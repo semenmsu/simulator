@@ -34,4 +34,13 @@
 # Editors
 .vscode
 
+#CMake
+CMakeFiles
+CMakeCache.txt
+*.cmake
+
+
+
+
 build
+

@@ -7,6 +7,7 @@
 #include <typeinfo>
 #include <utility>
 #include <vector>
+#include "sstream"
 
 #define MAX_DEPTH 10
 
@@ -75,7 +76,91 @@ class Market
 
   public:
     Market(){};
+    Market(std::string order_book)
+    {
+        this->operator<<(order_book);
+    }
     void PlaceOrder(T &order);
+
+    Market &operator<<(std::string order_book)
+    {
+
+        std::istringstream f(order_book);
+        std::string line;
+        while (std::getline(f, line))
+        {
+            line.erase(line.find_last_not_of(" \n\r\t") + 1);
+            if (line.size() > 0)
+            {
+                std::istringstream linestream(line);
+                int64_t price;
+                int64_t orderid;
+                int32_t amount;
+                int32_t dir;
+                int32_t user_code = 0;
+                linestream >> price;
+                linestream >> amount;
+                linestream >> dir;
+                linestream >> orderid;
+                linestream >> user_code;
+
+                T t;
+                t.orderid = orderid;
+                t.price = price;
+                t.amount = amount;
+                t.user_code = user_code;
+                t.action = 1;
+                t.dir = (char)dir;
+                //this.PlaceOrder(t);
+                PlaceOrder(t);
+                //std::cout << "price=" << price << " amount=" << amount << " dir=" << dir << " orderid=" << orderid << " user_code=" << user_code << std::endl;
+            }
+            //std::cout << "line " << line << " len=" << line.size() << std::endl;
+        }
+        return *this;
+    }
+
+    bool operator==(Market &mkt)
+    {
+        if (buyOrders.size() != mkt.buyOrders.size())
+        {
+            return false;
+        }
+        if (sellOrders.size() != mkt.sellOrders.size())
+        {
+            return false;
+        }
+        typename BuySet::iterator buy_it = buyOrders.begin();
+        typename BuySet::iterator mkt_buy_it = mkt.buyOrders.begin();
+        while (buy_it != buyOrders.end())
+        {
+            T t = *buy_it;
+            T mkt_t = *mkt_buy_it;
+            if (t != mkt_t)
+            {
+
+                std::cout << "return false \n";
+                return false;
+            }
+            buy_it++;
+            mkt_buy_it++;
+        }
+
+        typename SellSet::iterator sell_it = sellOrders.begin();
+        typename SellSet::iterator mkt_sell_it = sellOrders.begin();
+        while (sell_it != sellOrders.end())
+        {
+            T t = *sell_it;
+            T mkt_t = *mkt_sell_it;
+            if (t != mkt_t)
+            {
+                return false;
+            }
+            sell_it++;
+            mkt_sell_it++;
+        }
+        return true;
+    }
 
     void Print()
     {

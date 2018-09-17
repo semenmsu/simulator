@@ -95,30 +95,10 @@ class Market
             line.erase(line.find_last_not_of(" \n\r\t") + 1);
             if (line.size() > 0)
             {
-                std::istringstream linestream(line);
-                int64_t price;
-                int64_t orderid;
-                int32_t amount;
-                int32_t dir;
-                int32_t user_code = 0;
-                linestream >> price;
-                linestream >> amount;
-                linestream >> dir;
-                linestream >> orderid;
-                linestream >> user_code;
-
                 T t;
-                t.orderid = orderid;
-                t.price = price;
-                t.amount = amount;
-                t.user_code = user_code;
-                t.action = 1;
-                t.dir = (char)dir;
-                //this.PlaceOrder(t);
+                t << line;
                 PlaceOrder(t);
-                //std::cout << "price=" << price << " amount=" << amount << " dir=" << dir << " orderid=" << orderid << " user_code=" << user_code << std::endl;
             }
-            //std::cout << "line " << line << " len=" << line.size() << std::endl;
         }
         return *this;
     }

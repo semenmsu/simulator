@@ -1,3 +1,6 @@
+#ifndef __MARKET_H__
+#define __MARKET_H__
+
 #include <stdio.h>
 #include <set>
 #include <unordered_map>
@@ -120,7 +123,7 @@ class Market
         return *this;
     }
 
-    bool operator==(Market &mkt)
+    bool operator==(const Market &mkt)
     {
         if (buyOrders.size() != mkt.buyOrders.size())
         {
@@ -378,3 +381,5 @@ void Market<T>::PlaceOrder(T &order)
     }
     //printf("END\n");
 }
+
+#endif // !__MARKET_H__

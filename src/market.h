@@ -150,7 +150,7 @@ class Market
         }
 
         typename SellSet::iterator sell_it = sellOrders.begin();
-        typename SellSet::iterator mkt_sell_it = sellOrders.begin();
+        typename SellSet::iterator mkt_sell_it = mkt.sellOrders.begin();
         while (sell_it != sellOrders.end())
         {
             T t = *sell_it;

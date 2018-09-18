@@ -28,7 +28,73 @@
 #define CANCEL_REPLY_MSG 3
 #define TRADE_MSG 4
 
+#define MKT_DATA_L1
+
 //for matching only need price, orderid, amount, action
+
+struct BasePipe
+{
+    virtual BasePipe &operator|(BasePipe &) = 0;
+    virtual BasePipe &operator|(std::stringstream &) = 0;
+    virtual std::stringstream &In() = 0;
+};
+
+//send input to script and get answers + pass timestamps
+struct Script : BasePipe
+{
+    std::stringstream in;
+    std::stringstream *out = nullptr;
+
+    void Do()
+    {
+        //send request to server
+        //zmq_send(socket, data, sizeof(ts), 0);
+        //char buffer[64];
+        //int sz = zmq_recv(socket, buffer, 64, 0);
+        //std::cout << "zmq_recv " << sz << std::endl;
+    }
+
+    BasePipe &operator|(BasePipe &to) override
+    {
+        std::cout << "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@" << std::endl;
+        //out = &to.In();
+        //Do();
+        //to.In() << in.rdbuf();
+        /*
+        std::cout << "Pipeline script " << std::endl;
+        int msg_type;
+        in.read((char *)&msg_type, sizeof(msg_type));
+        if (msg_type == TIMESTAMP_MSG)
+        {
+            int64_t ts;
+            in.read((char *)&ts, sizeof(ts));
+            std::cout << "timestamp " << ts << std::endl;
+        }*/
+        return to;
+    }
+
+    BasePipe &operator|(std::stringstream &stream)
+    {
+        std::cout << "Pipeline script ----- in = " << in.tellp() << std::endl;
+        int msg_type;
+        in.read((char *)&msg_type, sizeof(msg_type));
+        if (msg_type == TIMESTAMP_MSG)
+        {
+            int64_t ts;
+            in.read((char *)&ts, sizeof(ts));
+            std::cout << ":::::::::::::::::::::::timestamp " << ts << std::endl;
+
+            stream.write((char *)&msg_type, sizeof(msg_type));
+            stream.write((char *)&ts, sizeof(ts));
+        }
+        return *this;
+    }
+
+    std::stringstream &In() override
+    {
+        return in;
+    };
+};
 
 template <typename T>
 struct LessComparator
@@ -88,7 +154,7 @@ struct Trade
 };
 
 template <typename T>
-class Market
+class Market : BasePipe
 {
     typedef typename std::set<T, IdComparator<T>> OrderSet;
     typedef typename std::set<T, GreaterComparator<T>> BuySet;
@@ -104,6 +170,8 @@ class Market
 
   public:
     std::stringstream out;
+    std::stringstream in;
+    int64_t ts;
     Market(){};
     Market(std::string order_book)
     {
@@ -170,6 +238,51 @@ class Market
         }
         return true;
     }
+
+    //handle script
+    BasePipe &operator|(BasePipe &to) override
+    {
+        //----------------------------------------
+        if (in.tellg() < in.tellp())
+        {
+            int msg_type;
+            in.read((char *)&msg_type, sizeof(msg_type));
+            if (msg_type == TIMESTAMP_MSG)
+            {
+                int64_t ts;
+                in.read((char *)&ts, sizeof(ts));
+                std::cout << "@@@@@@@@@@@@@@@@@@@ MARKET RECEIVE timestamp " << ts << std::endl;
+            }
+        }
+
+        //---------------------------------
+        std::cout << "operator | ts " << ts << std::endl;
+        //out = &to.In();
+        //Do();
+        int msg_type = TIMESTAMP_MSG;
+        to.In().write((char *)&msg_type, sizeof(msg_type));
+        to.In().write((char *)&ts, sizeof(ts));
+        std::cout << "WRITE TO SCRIPT :::::::::::::::::::::::::::::::" << std::endl;
+        return to;
+    }
+
+    BasePipe &operator|(std::stringstream &stream)
+    {
+        return *this;
+    }
+
+    //make matching
+    friend Market &operator>>(int ts, Market &market)
+    {
+        std::cout << "update ts " << ts << std::endl;
+        market.ts = ts;
+        return market;
+    }
+
+    std::stringstream &In() override
+    {
+        return in;
+    };
 
     void Print()
     {

@@ -333,6 +333,7 @@ void Market<T>::PlaceOrder(T &order)
         //printf("erased order\n");
         return;
     }
+
     if (order.dir == 1)
     {
         int remainingAmount = order.amount;
@@ -430,6 +431,8 @@ void Market<T>::PlaceOrder(T &order)
         int remainingAmount = order.amount;
         int status = 0;
         typename BuySet::iterator head;
+        std::vector<std::pair<Trade, Trade>> trades;
+
         while ((head = buyOrders.begin()) != buyOrders.end() && order.price <= head->price)
         {
             if (order.user_code > 0 && order.user_code == head->user_code)
@@ -440,6 +443,10 @@ void Market<T>::PlaceOrder(T &order)
             //#endif
             if (head->amount > remainingAmount)
             {
+                struct Trade taker = {.orderid = order.orderid, .deal_price = head->price, .amount = remainingAmount, .user_code = order.user_code};
+                struct Trade maker = {.orderid = head->orderid, .deal_price = head->price, .amount = remainingAmount, .user_code = head->user_code};
+                trades.push_back(std::pair<Trade, Trade>(taker, maker));
+
                 updateBuyAmount(head, head->amount - remainingAmount);
                 remainingAmount = 0;
                 status = 0;
@@ -447,15 +454,58 @@ void Market<T>::PlaceOrder(T &order)
             }
             else if (head->amount < remainingAmount)
             {
+                struct Trade taker = {.orderid = order.orderid, .deal_price = head->price, .amount = head->amount, .user_code = order.user_code};
+                struct Trade maker = {.orderid = head->orderid, .deal_price = head->price, .amount = head->amount, .user_code = head->user_code};
+                trades.push_back(std::pair<Trade, Trade>(taker, maker));
+
                 remainingAmount -= head->amount;
                 eraseBuy(head);
             }
             else if (head->amount == remainingAmount)
             {
+                struct Trade taker = {.orderid = order.orderid, .deal_price = head->price, .amount = remainingAmount, .user_code = order.user_code};
+                struct Trade maker = {.orderid = head->orderid, .deal_price = head->price, .amount = remainingAmount, .user_code = head->user_code};
+                trades.push_back(std::pair<Trade, Trade>(taker, maker));
+
                 remainingAmount = 0;
                 status = 0;
                 eraseBuy(head);
                 break;
+            }
+        }
+
+        if (IsSimulatedUser(order))
+        {
+            if (status == 0)
+            {
+                struct NewReply reply = {.ext_id = order.ext_id, .orderid = order.orderid, .code = 0};
+                int msg_type = NEW_REPLY_MSG;
+                out.write((char *)&msg_type, sizeof(msg_type));
+                out.write((char *)&reply, sizeof(reply));
+            }
+            else if (status == 1)
+            {
+                struct NewReply reply = {.ext_id = order.ext_id, .orderid = order.orderid, .code = CROSS_ORDER_ERR};
+                int msg_type = NEW_REPLY_MSG;
+                out.write((char *)&msg_type, sizeof(msg_type));
+                out.write((char *)&reply, sizeof(reply));
+            }
+        }
+
+        //
+        for (auto &i : trades)
+        {
+            if (i.first.user_code > 0 && i.first.user_code < 1000)
+            {
+                int msg_type = TRADE_MSG;
+                out.write((char *)&msg_type, sizeof(msg_type));
+                out.write((char *)&i.first, sizeof(i.first));
+            }
+            if (i.second.user_code > 0 && i.second.user_code < 1000)
+            {
+                int msg_type = TRADE_MSG;
+                out.write((char *)&msg_type, sizeof(msg_type));
+                out.write((char *)&i.second, sizeof(i.second));
             }
         }
 

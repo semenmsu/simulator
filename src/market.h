@@ -10,13 +10,18 @@
 #include <typeinfo>
 #include <utility>
 #include <vector>
-#include "sstream"
+#include <sstream>
 
 #define MAX_DEPTH 10
 
 #define USER_CODE
 
 #define CONTR_ORDER_ERR 31 //
+
+#define TIMESTAMP_MSG 1
+#define NEW_REPLY_MSG 2
+#define CANCEL_REPLY_MSG 3
+#define TRADE_MSG 4
 
 //for matching only need price, orderid, amount, action
 
@@ -34,7 +39,7 @@ struct LessComparator
 };
 
 template <typename T>
-struct MoreComparator
+struct GreaterComparator
 {
     bool operator()(const T &left, const T &right)
     {
@@ -55,19 +60,34 @@ struct IdComparator
     };
 };
 
-struct Reply
+struct NewReply
 {
-    int64_t price;
+    int64_t ext_id;
+    int64_t orderid;
+    int32_t code;
+} __attribute__((packed, aligned(4)));
+
+struct CancelReply
+{
+    int64_t ext_id;
+    int64_t orderid;
+    int32_t code;
+};
+
+struct Trade
+{
+    int64_t orderid;
+    int64_t deal_price;
     int32_t amount;
+    int32_t user_code;
 };
 
 template <typename T>
 class Market
 {
     typedef typename std::set<T, IdComparator<T>> OrderSet;
-    typedef typename std::set<T, MoreComparator<T>> BuySet;
+    typedef typename std::set<T, GreaterComparator<T>> BuySet;
     typedef typename std::set<T, LessComparator<T>> SellSet;
-
     typedef typename std::unordered_map<std::pair<int32_t, int64_t>, T> Ccid2Order; //cliet client id
 
     //typedef typename std::unordered_map<int64_t, int64_t> Id2Cid;
@@ -78,6 +98,7 @@ class Market
     SellSet sellOrders;
 
   public:
+    std::stringstream out;
     Market(){};
     Market(std::string order_book)
     {
@@ -256,11 +277,27 @@ class Market
         buyOrders.insert(order);
         orders.insert(order);
     }
+
+    bool IsSimulatedUser(T &order)
+    {
+        //magic numbers:)
+        if (order.user_code > 0 && order.user_code < 1000)
+        {
+            return true;
+        }
+        return false;
+    }
+
+    void PreOrderPlace(T &order)
+    {
+        order.orderid = order.orderid * 1000000;
+    }
 };
 
 template <typename T>
 void Market<T>::PlaceOrder(T &order)
 {
+    //PreOrderPlace(order);
     //printf("placeorder\n");
     //std::cout << order;
     if (order.action == 0)
@@ -275,8 +312,27 @@ void Market<T>::PlaceOrder(T &order)
         int remainingAmount = order.amount;
         int status = 0;
         typename SellSet::iterator head;
-        std::vector<Reply> trades(10);
-        //int user_code = order.user_code;
+
+        if (IsSimulatedUser(order))
+        {
+            head = sellOrders.begin();
+            if (order.price < head->price)
+            {
+                struct NewReply reply = {.ext_id = order.ext_id, .orderid = 100, .code = 0};
+                int msg_type = NEW_REPLY_MSG;
+                out.write((char *)&msg_type, sizeof(msg_type));
+                out.write((char *)&reply, sizeof(reply));
+            }
+            else
+            {
+                //check
+                struct NewReply reply = {.ext_id = order.ext_id, .orderid = 100, .code = 0};
+                int msg_type = NEW_REPLY_MSG;
+                out.write((char *)&msg_type, sizeof(msg_type));
+                out.write((char *)&reply, sizeof(reply));
+            }
+        }
+        std::vector<std::pair<Trade, Trade>> trades;
 
         while ((head = sellOrders.begin()) != sellOrders.end() && order.price >= head->price)
         {
@@ -289,19 +345,31 @@ void Market<T>::PlaceOrder(T &order)
 
             if (head->amount > remainingAmount)
             {
+                struct Trade taker = {.orderid = order.orderid, .deal_price = head->price, .amount = remainingAmount, .user_code = order.user_code};
+                struct Trade maker = {.orderid = head->orderid, .deal_price = head->price, .amount = remainingAmount, .user_code = head->user_code};
+                trades.push_back(std::pair<Trade, Trade>(taker, maker));
 
                 updateSellAmount(head, head->amount - remainingAmount);
                 remainingAmount = 0;
                 status = 0;
+
                 break;
             }
             else if (head->amount < remainingAmount)
             {
+                struct Trade taker = {.orderid = order.orderid, .deal_price = head->price, .amount = head->amount, .user_code = order.user_code};
+                struct Trade maker = {.orderid = head->orderid, .deal_price = head->price, .amount = head->amount, .user_code = head->user_code};
+                trades.push_back(std::pair<Trade, Trade>(taker, maker));
+
                 remainingAmount -= head->amount;
                 eraseSell(head);
             }
             else if (head->amount == remainingAmount)
             {
+                struct Trade taker = {.orderid = order.orderid, .deal_price = head->price, .amount = remainingAmount, .user_code = order.user_code};
+                struct Trade maker = {.orderid = head->orderid, .deal_price = head->price, .amount = remainingAmount, .user_code = head->user_code};
+                trades.push_back(std::pair<Trade, Trade>(taker, maker));
+
                 remainingAmount = 0;
                 status = 0;
                 eraseSell(head);
@@ -313,6 +381,23 @@ void Market<T>::PlaceOrder(T &order)
         {
             order.amount = remainingAmount;
             insertBuyOrder(order);
+        }
+
+        //
+        for (auto &i : trades)
+        {
+            if (i.first.user_code > 0 && i.first.user_code < 1000)
+            {
+                int msg_type = TRADE_MSG;
+                out.write((char *)&msg_type, sizeof(msg_type));
+                out.write((char *)&i.first, sizeof(i.first));
+            }
+            if (i.second.user_code > 0 && i.second.user_code < 1000)
+            {
+                int msg_type = TRADE_MSG;
+                out.write((char *)&msg_type, sizeof(msg_type));
+                out.write((char *)&i.second, sizeof(i.second));
+            }
         }
     }
     else if (order.dir == 2)

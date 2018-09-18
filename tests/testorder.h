@@ -11,6 +11,7 @@ struct Order
 {
     int64_t orderid;
     int64_t price;
+    int64_t ext_id;
     int32_t amount;
     int32_t user_code; //16
     char action;
@@ -38,17 +39,20 @@ struct Order
         int32_t _amount;
         int32_t _dir;
         int32_t _user_code = 0;
+        int64_t _ext_id;
         linestream >> _price;
         linestream >> _amount;
         linestream >> _dir;
         linestream >> _orderid;
         linestream >> _user_code;
+        linestream >> _ext_id;
         price = _price;
         orderid = _orderid;
         amount = _amount;
         dir = (char)_dir;
         action = 1;
         user_code = _user_code;
+        ext_id = _ext_id;
 
         return *this;
     }

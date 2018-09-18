@@ -83,6 +83,76 @@ TEST(MatchingTest, AddBuyTakerOrderMultiMatching)
     EXPECT_EQ(1, mkt == mkt_expect);
 }
 
+TEST(MatchingTest, CancelBuyOrder)
+{
+    Market<Order> mkt(R"(
+        12 1 2 31
+        11 1 2 21
+        10 1 2 11 
+        
+        9 1 1 1 
+        8 1 1 2 
+        7 1 1 3 2
+        )");
+    mkt << "-2";
+    Market<Order> mkt_expect(R"(
+        12 1 2 31
+        11 1 2 21
+        10 1 2 11 
+
+        9 1 1 1 
+        7 1 1 3 2
+        )");
+    EXPECT_EQ(1, mkt == mkt_expect);
+}
+
+TEST(MatchingTest, CancelSellOrder)
+{
+    Market<Order> mkt(R"(
+        12 1 2 31
+        11 1 2 21
+        10 1 2 11 
+        
+        9 1 1 1 
+        8 1 1 2 
+        7 1 1 3 2
+        )");
+    mkt << "-11";
+    Market<Order> mkt_expect(R"(
+        12 1 2 31
+        11 1 2 21
+
+        9 1 1 1 
+        8 1 1 2
+        7 1 1 3 2
+        )");
+    EXPECT_EQ(1, mkt == mkt_expect);
+}
+
+TEST(MatchingTest, CancelNonExistentOrder)
+{
+    Market<Order> mkt(R"(
+        12 1 2 31
+        11 1 2 21
+        10 1 2 11 
+        
+        9 1 1 1 
+        8 1 1 2 
+        7 1 1 3 2
+        )");
+    mkt << "-111";
+    Market<Order> mkt_expect(R"(
+        12 1 2 31
+        11 1 2 21
+        10 1 2 11 
+        
+        9 1 1 1 
+        8 1 1 2 
+        7 1 1 3 2
+        )");
+    EXPECT_EQ(1, mkt == mkt_expect);
+}
+
 TEST(User, AddOrderReceiveNewReply)
 {
     Market<Order> mkt(R"(
@@ -191,4 +261,112 @@ TEST(User, AddBuyTakerReceiveNewReplyAndTwoTrades)
     EXPECT_EQ(mkt.out.tellg(), mkt.out.tellp());
 }
 
+TEST(User, AddBuyTakerCrossOrderFailure)
+{
+    Market<Order> mkt(R"(
+        12 1 2 31
+        11 1 2 21
+        10 1 2 11 77
+        
+        9 1 1 1 
+        8 1 1 2 
+        7 1 1 3 2 
+        )");
+
+    //need reset out
+    mkt.out.seekg(0, std::ios::beg);
+    mkt.out.seekp(0, std::ios::beg);
+    mkt << "10 1 1 555 77 101";
+
+    int msg_type;
+    mkt.out.read((char *)&msg_type, sizeof(msg_type));
+    EXPECT_EQ(msg_type, NEW_REPLY_MSG);
+
+    NewReply newReply;
+    mkt.out.read((char *)&newReply, sizeof(newReply));
+    EXPECT_EQ(newReply.orderid, 555);
+    EXPECT_EQ(newReply.ext_id, 101);
+    EXPECT_EQ(newReply.code, CROSS_ORDER_ERR);
+    EXPECT_EQ(mkt.out.tellp(), sizeof(newReply) + sizeof(msg_type));
+    EXPECT_EQ(mkt.out.tellg(), mkt.out.tellp());
+}
+
+TEST(User, CancelBuyOrder)
+{
+    Market<Order> mkt(R"(
+        12 1 2 31
+        11 1 2 21
+        10 1 2 11 
+        
+        9 1 1 1 
+        8 1 1 2 
+        7 1 1 3 77
+        )");
+
+    //reset out
+    mkt.out.seekg(0, std::ios::beg);
+    mkt.out.seekp(0, std::ios::beg);
+
+    mkt << "-3 77";
+
+    Market<Order> mkt_expect(R"(
+        12 1 2 31
+        11 1 2 21
+        10 1 2 11 
+
+        9 1 1 1
+        8 1 1 2 
+        )");
+
+    EXPECT_EQ(mkt.out.tellp(), sizeof(CancelReply) + sizeof(int));
+    int msg_type;
+    mkt.out.read((char *)&msg_type, sizeof(msg_type));
+    EXPECT_EQ(msg_type, CANCEL_REPLY_MSG);
+
+    CancelReply cancel_reply;
+    mkt.out.read((char *)&cancel_reply, sizeof(cancel_reply));
+    EXPECT_EQ(cancel_reply.orderid, 3);
+    EXPECT_EQ(cancel_reply.code, 0);
+    EXPECT_EQ(mkt.out.tellg(), mkt.out.tellp());
+}
+
+TEST(User, CancelBuyNonExistentOrder)
+{
+    Market<Order> mkt(R"(
+        12 1 2 31
+        11 1 2 21
+        10 1 2 11 
+        
+        9 1 1 1 
+        8 1 1 2 
+        7 1 1 3 77
+        )");
+
+    //reset out
+    mkt.out.seekg(0, std::ios::beg);
+    mkt.out.seekp(0, std::ios::beg);
+
+    mkt << "-4 77";
+
+    Market<Order> mkt_expect(R"(
+        12 1 2 31
+        11 1 2 21
+        10 1 2 11 
+
+        9 1 1 1
+        8 1 1 2 
+        7 1 1 3 77
+        )");
+
+    EXPECT_EQ(mkt.out.tellp(), sizeof(CancelReply) + sizeof(int));
+    int msg_type;
+    mkt.out.read((char *)&msg_type, sizeof(msg_type));
+    EXPECT_EQ(msg_type, CANCEL_REPLY_MSG);
+
+    CancelReply cancel_reply;
+    mkt.out.read((char *)&cancel_reply, sizeof(cancel_reply));
+    EXPECT_EQ(cancel_reply.orderid, 4);
+    EXPECT_EQ(cancel_reply.code, ORDER_NOT_FOUND);
+    EXPECT_EQ(mkt.out.tellg(), mkt.out.tellp());
+}
 #endif // !__MATCHING_TEST__

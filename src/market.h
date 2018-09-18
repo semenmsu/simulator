@@ -16,7 +16,12 @@
 
 #define USER_CODE
 
-#define CONTR_ORDER_ERR 31 //
+#define ORDER_NOT_FOUND 14
+#define CROSS_ORDER_ERR 31 //
+#define PRICE_OUTSIDE_LIMIT 32
+#define INPUT_PARAM_ERR 35
+#define PRICE_STEP_ERR 39
+#define EXCEEDED_TRANSACTION_LIMIT 54
 
 #define TIMESTAMP_MSG 1
 #define NEW_REPLY_MSG 2
@@ -215,7 +220,7 @@ class Market
         orders.erase(it);
     }
 
-    void eraseOrder(const T &order)
+    int eraseOrder(const T &order)
     {
         T t;
         t.orderid = order.orderid;
@@ -226,7 +231,7 @@ class Market
             //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1
             //std::cout << "CANT FIND THIS ORDER!!! " << order << std::endl;
             //getchar();
-            return;
+            return -1;
         }
         if (it->dir == 1)
         {
@@ -236,6 +241,7 @@ class Market
             typename BuySet::iterator buy_iter = buyOrders.find(t);
             //typename BuySet::iterator buy_iter = buyOrders.find({.orderid = it->orderid, .price = it->price});
             eraseBuy(buy_iter);
+            return 0;
         }
         else
         {
@@ -245,6 +251,7 @@ class Market
             typename SellSet::iterator sell_iter = sellOrders.find(t);
             //typename SellSet::iterator sell_iter = sellOrders.find({.orderid = it->orderid, .price = it->price});
             eraseSell(sell_iter);
+            return 0;
         }
     }
 
@@ -302,8 +309,27 @@ void Market<T>::PlaceOrder(T &order)
     //std::cout << order;
     if (order.action == 0)
     {
-        //printf("try erase order\n");
-        eraseOrder(order);
+
+        int erase_error = eraseOrder(order);
+        if (IsSimulatedUser(order))
+        {
+            if (erase_error == -1)
+            {
+                //not found
+                struct CancelReply reply = {.ext_id = order.ext_id, .orderid = order.orderid, .code = ORDER_NOT_FOUND};
+                int msg_type = CANCEL_REPLY_MSG;
+                out.write((char *)&msg_type, sizeof(msg_type));
+                out.write((char *)&reply, sizeof(reply));
+            }
+            else
+            {
+                //found
+                struct CancelReply reply = {.ext_id = order.ext_id, .orderid = order.orderid, .code = 0};
+                int msg_type = CANCEL_REPLY_MSG;
+                out.write((char *)&msg_type, sizeof(msg_type));
+                out.write((char *)&reply, sizeof(reply));
+            }
+        }
         //printf("erased order\n");
         return;
     }
@@ -313,25 +339,6 @@ void Market<T>::PlaceOrder(T &order)
         int status = 0;
         typename SellSet::iterator head;
 
-        if (IsSimulatedUser(order))
-        {
-            head = sellOrders.begin();
-            if (order.price < head->price)
-            {
-                struct NewReply reply = {.ext_id = order.ext_id, .orderid = 100, .code = 0};
-                int msg_type = NEW_REPLY_MSG;
-                out.write((char *)&msg_type, sizeof(msg_type));
-                out.write((char *)&reply, sizeof(reply));
-            }
-            else
-            {
-                //check
-                struct NewReply reply = {.ext_id = order.ext_id, .orderid = 100, .code = 0};
-                int msg_type = NEW_REPLY_MSG;
-                out.write((char *)&msg_type, sizeof(msg_type));
-                out.write((char *)&reply, sizeof(reply));
-            }
-        }
         std::vector<std::pair<Trade, Trade>> trades;
 
         while ((head = sellOrders.begin()) != sellOrders.end() && order.price >= head->price)
@@ -377,10 +384,22 @@ void Market<T>::PlaceOrder(T &order)
             }
         }
 
-        if (remainingAmount > 0 && status == 0)
+        if (IsSimulatedUser(order))
         {
-            order.amount = remainingAmount;
-            insertBuyOrder(order);
+            if (status == 0)
+            {
+                struct NewReply reply = {.ext_id = order.ext_id, .orderid = order.orderid, .code = 0};
+                int msg_type = NEW_REPLY_MSG;
+                out.write((char *)&msg_type, sizeof(msg_type));
+                out.write((char *)&reply, sizeof(reply));
+            }
+            else if (status == 1)
+            {
+                struct NewReply reply = {.ext_id = order.ext_id, .orderid = order.orderid, .code = CROSS_ORDER_ERR};
+                int msg_type = NEW_REPLY_MSG;
+                out.write((char *)&msg_type, sizeof(msg_type));
+                out.write((char *)&reply, sizeof(reply));
+            }
         }
 
         //
@@ -398,6 +417,12 @@ void Market<T>::PlaceOrder(T &order)
                 out.write((char *)&msg_type, sizeof(msg_type));
                 out.write((char *)&i.second, sizeof(i.second));
             }
+        }
+
+        if (remainingAmount > 0 && status == 0)
+        {
+            order.amount = remainingAmount;
+            insertBuyOrder(order);
         }
     }
     else if (order.dir == 2)

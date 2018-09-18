@@ -33,27 +33,42 @@ struct Order
 
     Order &operator<<(std::string order)
     {
-        std::istringstream linestream(order);
-        int64_t _price;
-        int64_t _orderid;
-        int32_t _amount;
-        int32_t _dir;
-        int32_t _user_code = 0;
-        int64_t _ext_id;
-        linestream >> _price;
-        linestream >> _amount;
-        linestream >> _dir;
-        linestream >> _orderid;
-        linestream >> _user_code;
-        linestream >> _ext_id;
-        price = _price;
-        orderid = _orderid;
-        amount = _amount;
-        dir = (char)_dir;
-        action = 1;
-        user_code = _user_code;
-        ext_id = _ext_id;
 
+        if (order[0] == '-')
+        {
+            order.erase(0, 1);
+            std::istringstream linestream(order);
+            int64_t _orderid;
+            int64_t _user_code;
+            linestream >> _orderid;
+            linestream >> _user_code;
+            orderid = _orderid;
+            action = 0;
+            user_code = _user_code;
+        }
+        else
+        {
+            std::istringstream linestream(order);
+            int64_t _price;
+            int64_t _orderid;
+            int32_t _amount;
+            int32_t _dir;
+            int32_t _user_code = 0;
+            int64_t _ext_id;
+            linestream >> _price;
+            linestream >> _amount;
+            linestream >> _dir;
+            linestream >> _orderid;
+            linestream >> _user_code;
+            linestream >> _ext_id;
+            price = _price;
+            orderid = _orderid;
+            amount = _amount;
+            dir = (char)_dir;
+            action = 1;
+            user_code = _user_code;
+            ext_id = _ext_id;
+        }
         return *this;
     }
 

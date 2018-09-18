@@ -285,7 +285,7 @@ TEST(User, AddBuyTakerCrossOrderFailure)
 
     NewReply newReply;
     mkt.out.read((char *)&newReply, sizeof(newReply));
-    EXPECT_EQ(newReply.orderid, 555);
+    EXPECT_EQ(newReply.orderid, 555); //doesn't work for user
     EXPECT_EQ(newReply.ext_id, 101);
     EXPECT_EQ(newReply.code, CROSS_ORDER_ERR);
     EXPECT_EQ(mkt.out.tellp(), sizeof(newReply) + sizeof(msg_type));

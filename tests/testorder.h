@@ -7,6 +7,58 @@
 
 #include <stdio.h>
 
+struct FortsFutOrderBook
+{
+    int64_t orderid;
+    int64_t dealid;
+    int64_t price;
+    int64_t deal_price;
+    int64_t moment; //40
+    int32_t amount;
+    int32_t amount_rest;
+    int32_t status;
+    int32_t user_code; //16
+    char action;
+    char dir;
+    char __padding[2];
+    friend std::ostream &operator<<(std::ostream &stream, const FortsFutOrderBook &order)
+    {
+        stream << order.price << " " << order.amount << " |" << (int)order.dir << " " << order.orderid << "  " << order.user_code << '\n';
+        return stream;
+    }
+} __attribute__((packed, aligned(4)));
+
+struct FortsOrder
+{
+    int64_t orderid;
+    int64_t price;
+    int64_t moment; //40
+    int32_t amount;
+    int32_t status;
+    int32_t user_code; //16
+    char action;
+    char dir;
+    char __padding[2];
+    int cl_ord_id;
+    FortsOrder(){};
+    FortsOrder(const FortsFutOrderBook &source)
+    {
+        orderid = source.orderid;
+        price = source.price;
+        moment = source.moment;
+        amount = source.amount;
+        status = source.status;
+        action = source.action;
+        dir = source.dir;
+        user_code = source.user_code;
+    }
+    friend std::ostream &operator<<(std::ostream &stream, const FortsOrder &order)
+    {
+        stream << order.price << " " << order.amount << " |" << (int)order.dir << " " << order.orderid << "  " << order.user_code << '\n';
+        return stream;
+    }
+} __attribute__((packed, aligned(4)));
+
 struct Order
 {
     int64_t orderid;
@@ -29,6 +81,16 @@ struct Order
         stream << order.price << " " << order.amount << " "
                << (int)order.dir << " " << order.orderid << " " << order.user_code << '\n';
         return stream;
+    }
+
+    Order(const FortsFutOrderBook &source)
+    {
+        orderid = source.orderid;
+        price = source.price;
+        amount = source.amount;
+        action = source.action;
+        dir = source.dir;
+        user_code = source.user_code;
     }
 
     Order &operator<<(std::string order)

@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 #include <sstream>
+#include "include/reader.h"
 
 #define MAX_DEPTH 10
 
@@ -23,14 +24,113 @@
 #define PRICE_STEP_ERR 39
 #define EXCEEDED_TRANSACTION_LIMIT 54
 
+#define EMPTY 0
 #define TIMESTAMP_MSG 1
 #define NEW_REPLY_MSG 2
 #define CANCEL_REPLY_MSG 3
 #define TRADE_MSG 4
+#define NEW_ORDER 101
+#define CANCEL_ORDER 102
 
 #define MKT_DATA_L1
 
+#define ORDERID_MULT 1000
+
+#define Reset "\x1b[0m"
+//#define Bright "\x1b[1m"
+//#define Dim \x1b[2m
+//#define Underscore \x1b[4m
+//#define Blink \x1b[5m
+//#define Reverse \x1b[7m
+//#define Hidden \x1b[8m
+
+//#define FgBlack \x1b[30m
+#define FgRed "\x1b[31m"
+#define FgGreen "\x1b[32m"
+//#define FgYellow \x1b[33m
+//#define FgBlue \x1b[34m
+#define FgMagenta "\x1b[35m"
+//#define FgCyan \x1b[36m
+//#define FgWhite \x1b[37m
+
+//#define BgBlack \x1b[40m
+//#define BgRed \x1b[41m
+//#define BgGreen \x1b[42m
+//#define BgYellow \x1b[43m
+//#define BgBlue \x1b[44m
+//#define BgMagenta \x1b[45m
+//#define BgCyan \x1b[46m
+//#define BgWhite \x1b[47m
+
 //for matching only need price, orderid, amount, action
+
+struct NewOrder
+{
+    int64_t ts;
+    int32_t user_code;
+    int32_t isin_id;
+    int64_t ext_id;
+    int64_t price;
+    int32_t amount;
+    int32_t dir;
+
+    friend std::ostream &operator<<(std::ostream &stream, NewOrder &new_order)
+    {
+        std::cout << FgGreen << "[NEW_ORDER] " << new_order.user_code << " " << new_order.ext_id << " " << new_order.price << " " << new_order.amount << Reset << std::endl;
+        return stream;
+    }
+} __attribute__((packed, aligned(4)));
+
+struct CancelOrder
+{
+    int64_t ts;
+    int32_t user_code;
+    int32_t isin_id;
+    int64_t orderid;
+
+    friend std::ostream &operator<<(std::ostream &stream, CancelOrder &cancel_order)
+    {
+        std::cout << FgGreen << "[CANCEL_ORDER] " << cancel_order.user_code << " " << cancel_order.isin_id << " " << cancel_order.orderid << Reset << std::endl;
+        return stream;
+    }
+
+} __attribute__((packed, aligned(4)));
+
+struct NewReply
+{
+    int64_t ext_id;
+    int64_t orderid;
+    int32_t code;
+
+    friend std::ostream &operator<<(std::ostream &stream, NewReply &reply)
+    {
+        std::cout << FgRed << "[NEW_REPLY] " << reply.ext_id << " " << reply.orderid << " " << reply.code << Reset << std::endl;
+        return stream;
+    }
+
+} __attribute__((packed, aligned(4)));
+
+struct CancelReply
+{
+    int64_t ext_id;
+    int64_t orderid;
+    int32_t code;
+    int32_t amount;
+
+    friend std::ostream &operator<<(std::ostream &stream, CancelReply &reply)
+    {
+        std::cout << FgRed << "[CANCEL_REPLY] " << reply.ext_id << " " << reply.orderid << " " << reply.code << " " << reply.amount << Reset << std::endl;
+        return stream;
+    }
+};
+
+struct Trade
+{
+    int64_t orderid;
+    int64_t deal_price;
+    int32_t amount;
+    int32_t user_code;
+};
 
 struct BasePipe
 {
@@ -40,54 +140,212 @@ struct BasePipe
 };
 
 //send input to script and get answers + pass timestamps
+#define FREE 0
+#define PENDING_NEW 1
+#define NEW 2
+#define PENDING_CANCEL 3
+#define CANCELED 4
+
+template <typename T>
 struct Script : BasePipe
 {
+    struct State
+    {
+        int status;
+        int64_t ext_id;
+        int64_t orderid;
+        int64_t price;
+        int32_t amout;
+    } state;
+
+  public:
     std::stringstream in;
-    std::stringstream *out = nullptr;
+    std::stringstream out;
+    int64_t ts;
+    int64_t desired_price = 0;
+
+    Script()
+    {
+        state.status = FREE;
+        state.ext_id = 10;
+    };
+
+    void WriteNewOrder()
+    {
+        assert(state.status == FREE);
+        int msg_type = NEW_ORDER;
+        out.write((char *)&msg_type, sizeof(msg_type));
+
+        NewOrder new_order = {.ts = ts, .user_code = 1, .isin_id = 1, .ext_id = state.ext_id++, .price = 1, .amount = 1, .dir = 1};
+        out.write((char *)&new_order, sizeof(new_order));
+
+        std::cout << "WRITE NEW ORDER \n";
+        state.status = PENDING_NEW;
+    }
+
+    void WriteCancelOrder()
+    {
+        assert(state.status == NEW);
+        int msg_type = CANCEL_ORDER;
+        out.write((char *)&msg_type, sizeof(msg_type));
+
+        /*int64_t ts;
+    int32_t user_code;
+    int32_t isin_id;
+    int64_t orderid;*/
+        CancelOrder cancel_order = {.ts = ts, .user_code = 1, .isin_id = 1, .orderid = state.orderid};
+        out.write((char *)&cancel_order, sizeof(cancel_order));
+
+        state.status = PENDING_CANCEL;
+    }
+
+    void ReadNewReply()
+    {
+        NewReply new_reply;
+        in.read((char *)&new_reply, sizeof(new_reply));
+
+        std::cout << "[script] NEW_REPLY" << new_reply;
+
+        if (new_reply.code == 0)
+        {
+            state.orderid = new_reply.orderid;
+            state.status = NEW;
+        }
+        else
+        {
+            throw "new_reply.code != 0";
+        }
+    }
+
+    void ReadCancelReply()
+    {
+        CancelReply cancel_reply;
+        in.read((char *)&cancel_reply, sizeof(cancel_reply));
+
+        if (cancel_reply.code == 0)
+        {
+            state.status = CANCELED;
+            state.status = FREE;
+            state.orderid = 0;
+        }
+        else if (cancel_reply.code == ORDER_NOT_FOUND)
+        {
+            state.status = CANCELED;
+        }
+    }
+
+    void ReadTrade()
+    {
+        Trade trade;
+        in.read((char *)&trade, sizeof(trade));
+        std::cout << "new trade: " << trade.deal_price << " " << trade.amount << std::endl;
+    }
 
     void Do()
     {
-        //send request to server
-        //zmq_send(socket, data, sizeof(ts), 0);
-        //char buffer[64];
-        //int sz = zmq_recv(socket, buffer, 64, 0);
-        //std::cout << "zmq_recv " << sz << std::endl;
+        std::cout << "DO DO DO DO ....................................... state " << state.status << std::endl;
+        switch (state.status)
+        {
+        case FREE:
+            WriteNewOrder();
+            break;
+        case PENDING_NEW:
+            break;
+        case NEW:
+            WriteCancelOrder();
+            break;
+        case PENDING_CANCEL:
+            break;
+        case CANCELED:
+            break;
+        }
+    }
+
+    int ReadMessageType()
+    {
+        if (in.tellg() < in.tellp())
+        {
+            int msg_type;
+            in.read((char *)&msg_type, sizeof(msg_type));
+            return msg_type;
+        }
+        else
+        {
+            return EMPTY;
+        }
+    }
+
+    void WriteTimeStamp(std::stringstream &to)
+    {
+        int msg_type = TIMESTAMP_MSG;
+        to.write((char *)&msg_type, sizeof(msg_type));
+        to.write((char *)&ts, sizeof(ts));
+        //std::cout << "WRITE TO SCRIPT :::::::::::::::::::::::::::::::" << std::endl;
+    }
+
+    void ResetIn()
+    {
+        in.seekg(0, std::ios::beg);
+        in.seekp(0, std::ios::beg);
+        //std::cout << "SCRIPT RESET IN \n";
+    }
+
+    void ReadTimeStamp()
+    {
+        in.read((char *)&ts, sizeof(ts));
+        //std::cout << ":::::::::::::::::::::::timestamp " << ts << std::endl;
+    }
+
+    BasePipe &operator|(std::stringstream &to)
+    {
+        //read input stream
+        while (true)
+        {
+            int msg_type = ReadMessageType();
+            switch (msg_type)
+            {
+            case EMPTY:
+                ResetIn();
+                break;
+            case TIMESTAMP_MSG:
+                ReadTimeStamp();
+                break;
+            case NEW_REPLY_MSG:
+                ReadNewReply();
+                break;
+            case CANCEL_REPLY_MSG:
+                ReadCancelReply();
+                break;
+            case TRADE_MSG:
+                ReadTrade();
+                break;
+            default:
+                throw "unknow state";
+            }
+
+            if (msg_type == EMPTY)
+            {
+                break;
+            }
+        }
+
+        Do();
+        std::cout << "[script-start] mkt.in.tellp = " << to.tellp() << " mkt.in.tellg = " << to.tellg() << std::endl;
+        //write output stream
+        WriteTimeStamp(to);
+
+        if (out.tellp() > out.tellg())
+        {
+            to << out.rdbuf(); //copy
+        }
+
+        std::cout << "[script-end] mkt.in.tellp = " << to.tellp() << " mkt.in.tellg = " << to.tellg() << std::endl;
+        return *this;
     }
 
     BasePipe &operator|(BasePipe &to) override
     {
-        std::cout << "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@" << std::endl;
-        //out = &to.In();
-        //Do();
-        //to.In() << in.rdbuf();
-        /*
-        std::cout << "Pipeline script " << std::endl;
-        int msg_type;
-        in.read((char *)&msg_type, sizeof(msg_type));
-        if (msg_type == TIMESTAMP_MSG)
-        {
-            int64_t ts;
-            in.read((char *)&ts, sizeof(ts));
-            std::cout << "timestamp " << ts << std::endl;
-        }*/
         return to;
-    }
-
-    BasePipe &operator|(std::stringstream &stream)
-    {
-        std::cout << "Pipeline script ----- in = " << in.tellp() << std::endl;
-        int msg_type;
-        in.read((char *)&msg_type, sizeof(msg_type));
-        if (msg_type == TIMESTAMP_MSG)
-        {
-            int64_t ts;
-            in.read((char *)&ts, sizeof(ts));
-            std::cout << ":::::::::::::::::::::::timestamp " << ts << std::endl;
-
-            stream.write((char *)&msg_type, sizeof(msg_type));
-            stream.write((char *)&ts, sizeof(ts));
-        }
-        return *this;
     }
 
     std::stringstream &In() override
@@ -131,28 +389,6 @@ struct IdComparator
     };
 };
 
-struct NewReply
-{
-    int64_t ext_id;
-    int64_t orderid;
-    int32_t code;
-} __attribute__((packed, aligned(4)));
-
-struct CancelReply
-{
-    int64_t ext_id;
-    int64_t orderid;
-    int32_t code;
-};
-
-struct Trade
-{
-    int64_t orderid;
-    int64_t deal_price;
-    int32_t amount;
-    int32_t user_code;
-};
-
 template <typename T>
 class Market : BasePipe
 {
@@ -172,6 +408,7 @@ class Market : BasePipe
     std::stringstream out;
     std::stringstream in;
     int64_t ts;
+    int64_t last_order_id;
     Market(){};
     Market(std::string order_book)
     {
@@ -239,30 +476,138 @@ class Market : BasePipe
         return true;
     }
 
-    //handle script
-    BasePipe &operator|(BasePipe &to) override
+    void ResetIn()
     {
-        //----------------------------------------
+        in.seekg(0, std::ios::beg);
+        in.seekp(0, std::ios::beg);
+        std::cout << "[market] RESET IN \n";
+    }
+
+    int ReadMessageType()
+    {
         if (in.tellg() < in.tellp())
         {
             int msg_type;
             in.read((char *)&msg_type, sizeof(msg_type));
-            if (msg_type == TIMESTAMP_MSG)
+            return msg_type;
+        }
+        else
+        {
+            return EMPTY;
+        }
+    }
+
+    void ReadTimeStamp()
+    {
+        int64_t ists;
+        in.read((char *)&ists, sizeof(ists));
+        std::cout << "[market] read timestamp " << ists << std::endl;
+        //std::cout << ":::::::::::::::::::::::timestamp " << ts << std::endl;
+    }
+
+    void ReadNewOrder()
+    {
+
+        NewOrder new_order;
+        in.read((char *)&new_order, sizeof(new_order));
+        T t;
+        /*int64_t ts;
+    int32_t user_code;
+    int32_t isin_id;
+    int64_t ext_id;
+    int64_t price;
+    int32_t amount;
+    int32_t dir;*/
+        t.action = 1;
+        t.dir = (int)new_order.dir;
+        t.orderid = 0;
+        t.price = new_order.price;
+        t.amount = new_order.amount;
+        t.ext_id = new_order.ext_id;
+        t.user_code = new_order.user_code;
+        //std::cout << "[script] READ NEW ORDER ext_id " << t.ext_id << std::endl;
+        std::cout << "[script] " << new_order;
+        PlaceOrder(t);
+    }
+
+    void ReadCancelOrder()
+    {
+        /*int64_t ts;
+    int32_t user_code;
+    int32_t isin_id;
+    int64_t orderid;*/
+        CancelOrder cancel_order;
+        in.read((char *)&cancel_order, sizeof(cancel_order));
+        T t;
+        t.action = 0;
+        t.orderid = cancel_order.orderid;
+        t.user_code = cancel_order.user_code;
+        std::cout << "[script] " << cancel_order;
+        PlaceOrder(t);
+    }
+
+    void ReadInputStream()
+    {
+        //read input stream
+        while (true)
+        {
+            int msg_type = ReadMessageType();
+            switch (msg_type)
             {
-                int64_t ts;
-                in.read((char *)&ts, sizeof(ts));
-                std::cout << "@@@@@@@@@@@@@@@@@@@ MARKET RECEIVE timestamp " << ts << std::endl;
+            case EMPTY:
+                std::cout << "[market] EMPTY\n";
+                ResetIn();
+                break;
+            case TIMESTAMP_MSG:
+                std::cout << "[market] TIMESTAMP_MSG\n";
+                ReadTimeStamp();
+                break;
+            case NEW_ORDER:
+                std::cout << "[market] NEW_ORDER\n";
+                ReadNewOrder();
+                break;
+            case CANCEL_ORDER:
+                std::cout << "[market] CANCEL_ORDER\n";
+                ReadCancelOrder();
+                break;
+            default:
+                throw "unknow state";
+            }
+
+            if (msg_type == EMPTY)
+            {
+                break;
             }
         }
+    }
 
-        //---------------------------------
-        std::cout << "operator | ts " << ts << std::endl;
-        //out = &to.In();
-        //Do();
+    void ReadOrderFile()
+    {
+    }
+
+    void WriteTimeStamp(std::stringstream &stream)
+    {
         int msg_type = TIMESTAMP_MSG;
-        to.In().write((char *)&msg_type, sizeof(msg_type));
-        to.In().write((char *)&ts, sizeof(ts));
+        stream.write((char *)&msg_type, sizeof(msg_type));
+        stream.write((char *)&ts, sizeof(ts));
         std::cout << "WRITE TO SCRIPT :::::::::::::::::::::::::::::::" << std::endl;
+    }
+
+    //handle script !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    BasePipe &operator|(BasePipe &to) override
+    {
+        std::cout << "[market-start] mkt.in.tellp = " << in.tellp() << " mkt.in.tellg = " << in.tellg() << std::endl;
+        ReadOrderFile();
+        ReadInputStream();
+        WriteTimeStamp(to.In());
+
+        std::cout << "[market-before-copy] script.in.tellp = " << to.In().tellp() << " script.in.tellg = " << to.In().tellg() << std::endl;
+        if (out.tellp() > out.tellg())
+        {
+            to.In() << out.rdbuf(); //copy
+        }
+
+        std::cout << "[market-after-copy] script.in.tellp = " << to.In().tellp() << " script.in.tellg = " << to.In().tellg() << std::endl;
         return to;
     }
 
@@ -420,6 +765,25 @@ void Market<T>::PlaceOrder(T &order)
     //PreOrderPlace(order);
     //printf("placeorder\n");
     //std::cout << order;
+    if (order.user_code > 0 && order.user_code < 1000)
+    {
+        if (order.orderid == 0)
+        {
+            assert(order.action == 1);
+            last_order_id++;
+            order.orderid = last_order_id;
+        }
+    }
+    else
+    {
+        order.orderid *= ORDERID_MULT;
+    }
+
+    if (order.action == 1 && order.orderid > last_order_id)
+    {
+        last_order_id = order.orderid + 1;
+    }
+
     if (order.action == 0)
     {
 
@@ -438,6 +802,7 @@ void Market<T>::PlaceOrder(T &order)
             {
                 //found
                 struct CancelReply reply = {.ext_id = order.ext_id, .orderid = order.orderid, .code = 0};
+                std::cout << reply;
                 int msg_type = CANCEL_REPLY_MSG;
                 out.write((char *)&msg_type, sizeof(msg_type));
                 out.write((char *)&reply, sizeof(reply));
@@ -503,6 +868,7 @@ void Market<T>::PlaceOrder(T &order)
             if (status == 0)
             {
                 struct NewReply reply = {.ext_id = order.ext_id, .orderid = order.orderid, .code = 0};
+                std::cout << "[market] SEND NEW_REPLY " << reply << std::endl;
                 int msg_type = NEW_REPLY_MSG;
                 out.write((char *)&msg_type, sizeof(msg_type));
                 out.write((char *)&reply, sizeof(reply));

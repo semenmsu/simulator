@@ -11,7 +11,7 @@
 #include <utility>
 #include <vector>
 #include <sstream>
-#include "include/reader.h"
+#include "../include/reader.h"
 
 #define MAX_DEPTH 10
 
@@ -32,7 +32,7 @@
 #define NEW_ORDER 101
 #define CANCEL_ORDER 102
 
-#define MKT_DATA_L1
+#define MKT_DATA_L1 10001
 
 #define ORDERID_MULT 1000
 
@@ -122,7 +122,7 @@ struct CancelReply
         std::cout << FgRed << "[CANCEL_REPLY] " << reply.ext_id << " " << reply.orderid << " " << reply.code << " " << reply.amount << Reset << std::endl;
         return stream;
     }
-};
+} __attribute__((packed, aligned(4)));
 
 struct Trade
 {
@@ -130,7 +130,14 @@ struct Trade
     int64_t deal_price;
     int32_t amount;
     int32_t user_code;
-};
+} __attribute__((packed, aligned(4)));
+
+struct MktDataL1
+{
+    int32_t isin_id;
+    int64_t bid;
+    int64_t ask;
+} __attribute__((packed, aligned(4)));
 
 struct BasePipe
 {
@@ -163,11 +170,14 @@ struct Script : BasePipe
     std::stringstream out;
     int64_t ts;
     int64_t desired_price = 0;
+    int64_t bid;
+    int64_t ask;
 
     Script()
     {
         state.status = FREE;
         state.ext_id = 10;
+        desired_price = 1;
     };
 
     void WriteNewOrder()
@@ -176,7 +186,7 @@ struct Script : BasePipe
         int msg_type = NEW_ORDER;
         out.write((char *)&msg_type, sizeof(msg_type));
 
-        NewOrder new_order = {.ts = ts, .user_code = 1, .isin_id = 1, .ext_id = state.ext_id++, .price = 1, .amount = 1, .dir = 1};
+        NewOrder new_order = {.ts = ts, .user_code = 1, .isin_id = 1, .ext_id = state.ext_id++, .price = desired_price, .amount = 1, .dir = 1};
         out.write((char *)&new_order, sizeof(new_order));
 
         std::cout << "WRITE NEW ORDER \n";
@@ -239,6 +249,7 @@ struct Script : BasePipe
         Trade trade;
         in.read((char *)&trade, sizeof(trade));
         std::cout << "new trade: " << trade.deal_price << " " << trade.amount << std::endl;
+        getchar();
     }
 
     void Do()
@@ -296,6 +307,23 @@ struct Script : BasePipe
         //std::cout << ":::::::::::::::::::::::timestamp " << ts << std::endl;
     }
 
+    void ReadMarketDataL1()
+    {
+        MktDataL1 mkt_data_l1;
+        in.read((char *)&mkt_data_l1, sizeof(mkt_data_l1));
+        std::cout << "[script] market_data_l1 " << mkt_data_l1.bid << " | " << mkt_data_l1.ask << std::endl;
+
+        if (mkt_data_l1.bid > 0)
+        {
+            bid = mkt_data_l1.bid;
+            desired_price = bid - 100 * 1000000L;
+        }
+        if (mkt_data_l1.ask > 0)
+        {
+            ask = mkt_data_l1.ask;
+        }
+    }
+
     BasePipe &operator|(std::stringstream &to)
     {
         //read input stream
@@ -318,6 +346,9 @@ struct Script : BasePipe
                 break;
             case TRADE_MSG:
                 ReadTrade();
+                break;
+            case MKT_DATA_L1:
+                ReadMarketDataL1();
                 break;
             default:
                 throw "unknow state";
@@ -407,9 +438,18 @@ class Market : BasePipe
   public:
     std::stringstream out;
     std::stringstream in;
+    Reader *reader;
     int64_t ts;
     int64_t last_order_id;
-    Market(){};
+    Market(){
+
+    };
+
+    Market(Reader &rdr)
+    {
+        reader = &rdr;
+    }
+
     Market(std::string order_book)
     {
         this->operator<<(order_book);
@@ -581,8 +621,28 @@ class Market : BasePipe
         }
     }
 
+    void WriteMarketDataL1(int64_t bid, int64_t ask)
+    {
+        //not found
+        struct MktDataL1 mkt_data_l1 = {.isin_id = 1, .bid = bid, .ask = ask};
+        int msg_type = MKT_DATA_L1;
+        out.write((char *)&msg_type, sizeof(msg_type));
+        out.write((char *)&mkt_data_l1, sizeof(mkt_data_l1));
+    }
+
     void ReadOrderFile()
     {
+        int count = 0;
+        while (count++ < 5000)
+        {
+            T order;
+            reader->Read(order);
+            PlaceOrder(order);
+        }
+        //Print();
+        std::cout << GetBid() << " | " << GetAsk() << std::endl;
+        WriteMarketDataL1(GetBid(), GetAsk());
+        //getchar();
     }
 
     void WriteTimeStamp(std::stringstream &stream)
@@ -628,6 +688,32 @@ class Market : BasePipe
     {
         return in;
     };
+
+    int64_t GetBid()
+    {
+        if (buyOrders.size() > 0)
+        {
+            auto it = buyOrders.begin();
+            return it->price;
+        }
+        else
+        {
+            return 0;
+        }
+    }
+
+    int64_t GetAsk()
+    {
+        if (sellOrders.size() > 0)
+        {
+            auto it = sellOrders.begin();
+            return it->price;
+        }
+        else
+        {
+            return 0;
+        }
+    }
 
     void Print()
     {

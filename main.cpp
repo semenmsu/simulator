@@ -5,11 +5,12 @@
 #include "include/json.hpp"
 #include "src/market.h"
 #include "tests/testorder.h"
+#include "include/reader.h"
 
+/*
 using json = nlohmann::json;
 json j3;
 
-/*
 class FortsFutSettings
 {
     int64_t startPosition;
@@ -54,8 +55,8 @@ class FortsFutSettings
     { //std::cout << "StartPosition: " << startPosition << std::endl;
         std::cout << "Settings: " << symbol << " " << startPosition << " " << stopPosition << std::endl;
     };
-};
-
+};*/
+/*
 struct FortsFutOrderBook
 {
     int64_t orderid;
@@ -107,6 +108,7 @@ struct FortsOrder
         return stream;
     }
 } __attribute__((packed, aligned(4)));
+
 
 void InitConfig()
 {
@@ -164,24 +166,42 @@ void scenario1()
 }
 */
 
+void scenario2()
+{
+    Reader reader;
+    Market<Order> mkt(reader);
+    //Script<Order> script;
+
+    Script<Order> script;
+
+    auto cycle = [&](int ts) { ts >> mkt | script | mkt.in; };
+    std::vector<int> steps = {1, 2, 3, 4, 5, 6, 7, 8, 9};
+
+    //for (auto &i : steps)
+    int i = 0;
+    while (true)
+    {
+        cycle(i++);
+        std::cout << "cycle \n\n"
+                  << std::endl;
+        //usleep(2000000);
+    }
+}
+
 int main()
 {
-
     //read_file(settings.StartPosition(), settings.StopPosition());
     //read_file3(settings.StartPosition(), settings.StopPosition());
     //
-    Market<Order> mkt;
-    Script script;
-    auto cycle = [&](int ts) { ts >> mkt | script | mkt.in; };
-    std::vector<int> steps = {1, 2, 3, 4};
-
-    for (auto &i : steps)
+    /*
+    Reader reader;
+    while (true)
     {
-        cycle(i);
-        std::cout << "cycle \n\n"
-                  << std::endl;
-        usleep(1000000);
-    }
-    return 0;
+        Order order;
+        reader.Read(order);
+    }*/
+
+    scenario2();
+
     return 0;
 }

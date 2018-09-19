@@ -163,6 +163,8 @@ struct Script : BasePipe
         int64_t orderid;
         int64_t price;
         int32_t amout;
+        int32_t remainingAmount;
+        int32_t dir = 1;
     } state;
 
   public:
@@ -172,12 +174,18 @@ struct Script : BasePipe
     int64_t desired_price = 0;
     int64_t bid;
     int64_t ask;
+    int32_t position = 0;
+    int64_t money = 0;
+    double profit = 0;
+    std::ofstream f;
 
     Script()
     {
         state.status = FREE;
         state.ext_id = 10;
         desired_price = 1;
+        //f.open("text.txt");
+        f.open("files/out.pipe");
     };
 
     void WriteNewOrder()
@@ -186,11 +194,12 @@ struct Script : BasePipe
         int msg_type = NEW_ORDER;
         out.write((char *)&msg_type, sizeof(msg_type));
 
-        NewOrder new_order = {.ts = ts, .user_code = 1, .isin_id = 1, .ext_id = state.ext_id++, .price = desired_price, .amount = 1, .dir = 1};
+        NewOrder new_order = {.ts = ts, .user_code = 1, .isin_id = 1, .ext_id = state.ext_id++, .price = desired_price, .amount = 1, .dir = state.dir};
         out.write((char *)&new_order, sizeof(new_order));
 
         std::cout << "WRITE NEW ORDER \n";
         state.status = PENDING_NEW;
+        state.remainingAmount = 1;
     }
 
     void WriteCancelOrder()
@@ -205,6 +214,7 @@ struct Script : BasePipe
     int64_t orderid;*/
         CancelOrder cancel_order = {.ts = ts, .user_code = 1, .isin_id = 1, .orderid = state.orderid};
         out.write((char *)&cancel_order, sizeof(cancel_order));
+        std::cout << FgGreen << "[script] CANCEL_ORDER " << state.orderid << Reset << std::endl;
 
         state.status = PENDING_CANCEL;
     }
@@ -238,8 +248,14 @@ struct Script : BasePipe
             state.status = FREE;
             state.orderid = 0;
         }
-        else if (cancel_reply.code == ORDER_NOT_FOUND)
+        else if (cancel_reply.code == ORDER_NOT_FOUND && state.remainingAmount == 0)
         {
+            state.status = FREE;
+        }
+        else if (cancel_reply.code == ORDER_NOT_FOUND && state.remainingAmount > 0)
+        {
+            std::cout << "[script]  ORDER_NOT_FOUND" << std::endl;
+            //getchar();
             state.status = CANCELED;
         }
     }
@@ -248,8 +264,36 @@ struct Script : BasePipe
     {
         Trade trade;
         in.read((char *)&trade, sizeof(trade));
-        std::cout << "new trade: " << trade.deal_price << " " << trade.amount << std::endl;
-        getchar();
+        if (state.dir == 1)
+        {
+            position += trade.amount;
+            money -= trade.amount * trade.deal_price;
+        }
+        else
+        {
+            position -= trade.amount;
+            money += trade.amount * trade.deal_price;
+        }
+        profit = money + position * trade.deal_price;
+        if (position < 0)
+        {
+            state.dir = 1;
+        }
+
+        if (position > 0)
+        {
+            state.dir = 2;
+        }
+        std::cout << FgGreen << "profit = " << profit / 1000000 << Reset << std::endl;
+        if (f.is_open())
+        {
+            f << profit / 1000000 << std::endl;
+        }
+
+        std::cout << "[script] new trade position " << position << " " << trade.deal_price << " " << trade.amount << " " << trade.orderid << std::endl;
+        state.remainingAmount = 0;
+        //state.status = FREE;
+        // getchar();
     }
 
     void Do()
@@ -259,6 +303,7 @@ struct Script : BasePipe
         {
         case FREE:
             WriteNewOrder();
+            //getchar();
             break;
         case PENDING_NEW:
             break;
@@ -268,6 +313,7 @@ struct Script : BasePipe
         case PENDING_CANCEL:
             break;
         case CANCELED:
+            //getchar();
             break;
         }
     }
@@ -316,7 +362,7 @@ struct Script : BasePipe
         if (mkt_data_l1.bid > 0)
         {
             bid = mkt_data_l1.bid;
-            desired_price = bid - 100 * 1000000L;
+            desired_price = bid - 10 * 1000000L;
         }
         if (mkt_data_l1.ask > 0)
         {

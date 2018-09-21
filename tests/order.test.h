@@ -49,11 +49,16 @@ TEST(ProcessOrder, UpdatePriceSendNewOrder)
     order << "u 1000 1";
     order.Do();
 
-    EXPECT_EQ(out.tellp(), sizeof(int) + sizeof(NewOrder));
+    ScriptOrder *pointer;
+
+    EXPECT_EQ(out.tellp(), sizeof(int) + sizeof(NewOrder) + sizeof(pointer));
     int msg_type = ReadMsgType(out);
     EXPECT_EQ(msg_type, NEW_ORDER);
+
+    out.read((char *)&pointer, sizeof(pointer));
+    EXPECT_EQ(pointer, &order);
+
     NewOrder new_order;
-    //out.read((char *)&new_order, sizeof(new_order));
     ReadNewOrder(out, new_order);
     EXPECT_EQ(new_order.price, 1000);
     EXPECT_EQ(new_order.amount, 1);
@@ -89,11 +94,15 @@ TEST(ProcessOrder, UpdatePriceSendCancel)
 
     int msg_type = ReadMsgType(out);
     EXPECT_EQ(msg_type, NEW_ORDER);
+    ScriptOrder *pointer;
+    out.read((char *)&pointer, sizeof(pointer));
     NewOrder new_order;
     ReadNewOrder(out, new_order);
 
     msg_type = ReadMsgType(out);
     EXPECT_EQ(msg_type, CANCEL_ORDER);
+    ScriptOrder *pointer2;
+    out.read((char *)&pointer2, sizeof(pointer2));
     CancelOrder cancel_order;
     ReadCancelOrder(out, cancel_order);
     EXPECT_EQ(cancel_order.orderid, 101);

@@ -31,15 +31,18 @@ struct ScriptOrder
     int64_t session_id = 0;
 
     std::stringstream *out;
+    ScriptOrder *ref;
 
     ScriptOrder()
     {
+        ref = this;
         Free();
         session_id = 0;
     }
 
     ScriptOrder(std::stringstream &out)
     {
+        ref = this;
         Free();
         session_id = 0;
         this->out = &out;
@@ -50,15 +53,22 @@ struct ScriptOrder
         out->write((char *)&msg_type, sizeof(msg_type));
     }
 
+    void WriteOrderPointer()
+    {
+        out->write((char *)&ref, sizeof(ref));
+    }
+
     void Write(NewOrder &new_order)
     {
         WriteMsgType(NEW_ORDER);
+        WriteOrderPointer();
         out->write((char *)&new_order, sizeof(new_order));
     }
 
     void Write(CancelOrder &cancel_order)
     {
         WriteMsgType(CANCEL_ORDER);
+        WriteOrderPointer();
         out->write((char *)&cancel_order, sizeof(cancel_order));
     }
 
@@ -266,6 +276,153 @@ struct ScriptOrder
         state.status = FREE;
         state.orderid = 0;
         state.remainingAmount = 0;
+    }
+};
+
+struct ScriptBroker
+{
+
+    struct OrderSession
+    {
+        ScriptOrder *order;
+        int64_t ext_id;
+        int64_t external_ext_id;
+    };
+
+    std::stringstream *in;
+    std::stringstream *out;
+    std::stringstream orders;
+    std::stringstream response;
+
+    std::unordered_map<ScriptOrder *, OrderSession> order2session;
+    std::unordered_map<int64_t, OrderSession *> extid2session;
+    std::unordered_map<int64_t, OrderSession *> orderid2session;
+    int64_t ext_id;
+    int64_t ts;
+
+    int64_t GenereateExtId()
+    {
+        return ++ext_id;
+    }
+
+    void WriteMsgType(int msg_type)
+    {
+        out->write((char *)&msg_type, sizeof(msg_type));
+    }
+
+    //system
+    int ReadMessageType(std::stringstream &stream)
+    {
+        if (stream.tellg() < stream.tellp())
+        {
+            int msg_type;
+            in->read((char *)&msg_type, sizeof(msg_type));
+            return msg_type;
+        }
+        else
+        {
+            return EMPTY;
+        }
+    }
+
+    void ReadOrders()
+    {
+        int msg_type;
+        while ((msg_type = ReadMessageType(orders)) != EMPTY)
+        {
+            if (msg_type == NEW_ORDER)
+            {
+                ScriptOrder *pointer;
+                out->read((char *)&pointer, sizeof(pointer));
+
+                int new_ext_id = GenereateExtId();
+                NewOrder new_order;
+                out->read((char *)&new_order, sizeof(new_order));
+                new_order.ext_id = new_ext_id;
+
+                OrderSession *session = &order2session[pointer];
+                session->order = pointer;
+                session->external_ext_id = new_ext_id;
+                session->ext_id = new_order.ext_id;
+                extid2session.insert(std::pair<int64_t, OrderSession *>(new_ext_id, session));
+
+                /*extid2session.insert(std::pair<int64_t, OrderSession>(new_ext_id, {.order = pointer,
+                                                                                   .ext_id = new_order.ext_id,
+                                                                                   .external_ext_id = new_ext_id}));*/
+
+                WriteMsgType(NEW_ORDER);
+                out->write((char *)&new_order, sizeof(new_order));
+            }
+            else if (msg_type == CANCEL_ORDER)
+            {
+
+                ScriptOrder *pointer;
+                out->read((char *)&pointer, sizeof(pointer));
+
+                //OrderSession *session = &order2session[pointer];
+
+                CancelOrder cancel_order;
+                out->read((char *)&cancel_order, sizeof(cancel_order));
+                WriteMsgType(CANCEL_ORDER);
+                out->write((char *)&cancel_order, sizeof(cancel_order));
+            }
+        }
+    }
+
+    void ReadMarketDataL1()
+    {
+        MktDataL1 mkt_data_l1;
+        in->read((char *)&mkt_data_l1, sizeof(mkt_data_l1));
+    }
+
+    void ReadInput()
+    {
+        int msg_type;
+        while ((msg_type = ReadMessageType(orders)) != EMPTY)
+        {
+            /*           #define TIMESTAMP_MSG 1
+#define NEW_REPLY_MSG 2
+#define CANCEL_REPLY_MSG 3
+#define TRADE_MSG 4*/
+            if (msg_type == NEW_REPLY_MSG)
+            {
+                NewReply new_reply;
+                in->read((char *)&new_reply, sizeof(new_reply));
+                OrderSession *session = extid2session[new_reply.ext_id];
+                new_reply.ext_id = session->ext_id;
+                orderid2session.insert(std::pair<int64_t, OrderSession *>((int64_t)new_reply.orderid, session));
+                session->order->ReplyNew(new_reply);
+            }
+            else if (msg_type == CANCEL_REPLY_MSG)
+            {
+                CancelReply cancel_reply;
+                in->read((char *)&cancel_reply, sizeof(cancel_reply));
+                //OrderSession *session
+                OrderSession *session = orderid2session[cancel_reply.orderid];
+                session->order->ReplyCancel(cancel_reply);
+            }
+            else if (msg_type == TRADE_MSG)
+            {
+                Trade trade;
+                in->read((char *)&trade, sizeof(trade));
+                OrderSession *session = orderid2session[trade.orderid];
+                session->order->ReplyTrade(trade);
+            }
+            else if (msg_type == TIMESTAMP_MSG)
+            {
+                in->read((char *)&ts, sizeof(ts));
+            }
+            else if (msg_type == MKT_DATA_L1)
+            {
+                ReadMarketDataL1();
+            }
+        }
+    }
+
+    void Do()
+    {
+        ReadInput();
+        ReadOrders();
     }
 };
 

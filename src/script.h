@@ -12,65 +12,7 @@
 #include <vector>
 #include <sstream>
 #include "iproto.h"
-
-struct SimpleOrder
-{
-    struct State
-    {
-        int status;
-        int64_t ext_id;
-        int64_t orderid;
-        int64_t price;
-        int32_t amout;
-        int32_t remainingAmount;
-        int32_t dir = 1;
-    } state;
-
-    int64_t desired_price = 0;
-    int32_t desired_amount = 0;
-
-    SimpleOrder()
-    {
-    }
-
-    //reaction
-    void WriteNewOrder()
-    {
-        //new_cb(*this)
-    }
-
-    void WriteCancelOrder()
-    {
-        //cancel_cb(*this);
-    }
-
-    void HandleNewState()
-    {
-        if (desired_price != state.price)
-        {
-            WriteCancelOrder();
-        }
-    }
-
-    void Do()
-    {
-        switch (state.status)
-        {
-        case FREE:
-            WriteNewOrder();
-            break;
-        case PENDING_NEW:
-            break;
-        case NEW:
-            HandleNewState();
-            break;
-        case PENDING_CANCEL:
-            break;
-        case CANCELED:
-            break;
-        }
-    }
-};
+#include "script_order.h"
 
 template <typename T>
 struct Script : BasePipe
@@ -87,6 +29,14 @@ struct Script : BasePipe
         int32_t dir = 1;
     } state;
 
+    struct OrderSession
+    {
+        int64_t sessionid;
+        int64_t ext_id;
+        int64_t orderid;
+        ScriptOrder *order;
+    };
+
     std::stringstream in;
     std::stringstream out;
     int64_t ts;
@@ -97,8 +47,12 @@ struct Script : BasePipe
     int64_t money = 0;
     double profit = 0;
     std::ofstream f;
+    int64_t g_ext_id = 0;
 
-    SimpleOrder buy;
+    std::unordered_map<int64_t, OrderSession> extid2session;
+    std::unordered_map<int64_t, OrderSession> orderid2session;
+
+    ScriptOrder buy;
 
     Script()
     {
@@ -112,6 +66,7 @@ struct Script : BasePipe
         state.status = FREE;
         state.ext_id = 10;
         desired_price = 1;
+
         if (file_name.size() > 0)
         {
             f.open(file_name);
@@ -120,43 +75,41 @@ struct Script : BasePipe
 
     void WriteMsgType(int msg_type)
     {
-        //int msg_type = NEW_ORDER;
         out.write((char *)&msg_type, sizeof(msg_type));
     }
 
+    //isin_id, price, amount, dir, should be setted
+    void CreateSession(NewOrder &new_order)
+    {
+        g_ext_id++;
+        new_order.ts = ts;
+        new_order.user_code = 1;
+        new_order.ext_id = g_ext_id;
+
+        //extid2session.insert(std::pair<g_ext_id, new_order>);
+    }
+    void Write(NewOrder &new_order)
+    {
+        WriteMsgType(NEW_ORDER);
+        out.write((char *)&new_order, sizeof(new_order));
+    }
     void WriteNewOrder()
     {
         assert(state.status == FREE);
-        int msg_type = NEW_ORDER;
-        out.write((char *)&msg_type, sizeof(msg_type));
 
         NewOrder new_order = {.ts = ts, .user_code = 1, .isin_id = 1, .ext_id = state.ext_id++, .price = desired_price, .amount = 1, .dir = state.dir};
-        out.write((char *)&new_order, sizeof(new_order));
+        Write(new_order);
 
+        //setups
         std::cout << "WRITE NEW ORDER \n";
         state.status = PENDING_NEW;
         state.remainingAmount = 1;
     }
 
-    void WriteNewOrder1()
-    {
-        assert(buy.state.status == FREE);
-        WriteMsgType(NEW_ORDER);
-
-        NewOrder new_order = {.ts = ts,
-                              .user_code = 1,
-                              .isin_id = 1,
-                              .ext_id = state.ext_id++,
-                              .price = buy.desired_price,
-                              .amount = buy.desired_amount,
-                              .dir = buy.state.dir};
-
-        buy.state.status = PENDING_NEW;
-    }
-
     void WriteCancelOrder()
     {
         assert(state.status == NEW);
+
         int msg_type = CANCEL_ORDER;
         out.write((char *)&msg_type, sizeof(msg_type));
 
@@ -165,6 +118,10 @@ struct Script : BasePipe
         std::cout << FgGreen << "[script] CANCEL_ORDER " << state.orderid << Reset << std::endl;
 
         state.status = PENDING_CANCEL;
+    }
+
+    void WriteCancelOrder1()
+    {
     }
 
     void ReadNewReply()
@@ -270,6 +227,7 @@ struct Script : BasePipe
         }
     }
 
+    //system
     int ReadMessageType()
     {
         if (in.tellg() < in.tellp())
@@ -305,6 +263,7 @@ struct Script : BasePipe
         //std::cout << ":::::::::::::::::::::::timestamp " << ts << std::endl;
     }
 
+    //marketdata
     void ReadMarketDataL1()
     {
         MktDataL1 mkt_data_l1;

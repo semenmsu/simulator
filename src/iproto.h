@@ -3,6 +3,8 @@
 
 #include "stdio.h"
 #include <iostream>
+#include <string>
+#include <sstream>
 
 #define ORDER_NOT_FOUND 14
 #define CROSS_ORDER_ERR 31 //
@@ -96,6 +98,22 @@ struct NewReply
     int64_t orderid;
     int32_t code;
 
+    NewReply &operator<<(std::string new_reply)
+    {
+        std::istringstream linestream(new_reply);
+        int64_t _ext_id = 0;
+        int64_t _orderid;
+        int32_t _code;
+        linestream >> _ext_id;
+        linestream >> _orderid;
+        linestream >> _code;
+        ext_id = _ext_id;
+        orderid = _orderid;
+        code = _code;
+
+        return *this;
+    }
+
     friend std::ostream &operator<<(std::ostream &stream, NewReply &reply)
     {
         std::cout << FgRed << "[NEW_REPLY] " << reply.ext_id << " " << reply.orderid << " " << reply.code << Reset << std::endl;
@@ -111,6 +129,26 @@ struct CancelReply
     int32_t code;
     int32_t amount;
 
+    CancelReply &operator<<(std::string cancel_reply)
+    {
+        std::istringstream linestream(cancel_reply);
+
+        int64_t _ext_id;
+        int64_t _orderid;
+        int32_t _code;
+        int32_t _amount;
+        linestream >> _ext_id;
+        linestream >> _orderid;
+        linestream >> _code;
+        linestream >> _amount;
+        ext_id = _ext_id;
+        orderid = _orderid;
+        code = _code;
+        amount = _amount;
+
+        return *this;
+    }
+
     friend std::ostream &operator<<(std::ostream &stream, CancelReply &reply)
     {
         std::cout << FgRed << "[CANCEL_REPLY] " << reply.ext_id << " " << reply.orderid << " " << reply.code << " " << reply.amount << Reset << std::endl;
@@ -124,6 +162,26 @@ struct Trade
     int64_t deal_price;
     int32_t amount;
     int32_t user_code;
+
+    Trade &operator<<(std::string trade)
+    {
+        std::istringstream linestream(trade);
+        int64_t _orderid;
+        int64_t _deal_price;
+        int32_t _amount;
+        int32_t _user_code;
+        linestream >> _orderid;
+        linestream >> _deal_price;
+        linestream >> _amount;
+        linestream >> _user_code;
+        orderid = _orderid;
+        deal_price = _deal_price;
+        amount = _amount;
+        user_code = _user_code;
+
+        return *this;
+    }
+
 } __attribute__((packed, aligned(4)));
 
 struct MktDataL1

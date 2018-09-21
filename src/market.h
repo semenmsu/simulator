@@ -19,8 +19,6 @@
 
 #define USER_CODE
 
-
-
 template <typename T>
 class Market : BasePipe
 {
@@ -226,7 +224,11 @@ class Market : BasePipe
     void WriteMarketDataL1(int64_t bid, int64_t ask)
     {
         //not found
-        struct MktDataL1 mkt_data_l1 = {.isin_id = 1, .bid = bid, .ask = ask};
+        //struct MktDataL1 mkt_data_l1 = {.isin_id = 1, .bid = bid, .ask = ask};
+        struct MktDataL1 mkt_data_l1;
+        mkt_data_l1.isin_id = 1;
+        mkt_data_l1.bid = bid;
+        mkt_data_l1.ask = ask;
         int msg_type = MKT_DATA_L1;
         out.write((char *)&msg_type, sizeof(msg_type));
         out.write((char *)&mkt_data_l1, sizeof(mkt_data_l1));

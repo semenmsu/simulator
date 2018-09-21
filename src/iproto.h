@@ -23,6 +23,7 @@
 
 #define MKT_DATA_L1 10001
 
+
 #define ORDERID_MULT 1000
 
 //send input to script and get answers + pass timestamps
@@ -189,6 +190,10 @@ struct MktDataL1
     int32_t isin_id;
     int64_t bid;
     int64_t ask;
+    int32_t is_ready = 0;
+    MktDataL1() : bid(0), ask(0), is_ready(0)
+    {
+    }
 } __attribute__((packed, aligned(4)));
 
 struct BasePipe

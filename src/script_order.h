@@ -29,6 +29,9 @@ struct ScriptOrder
     int64_t desired_price = 0;
     int32_t desired_amount = 0;
     int64_t session_id = 0;
+    int64_t total_money = 0;
+    int64_t total_trades = 0;
+    int64_t volume = 0;
 
     std::stringstream *out;
     ScriptOrder *ref;
@@ -45,6 +48,15 @@ struct ScriptOrder
         ref = this;
         Free();
         session_id = 0;
+        this->out = &out;
+    }
+
+    ScriptOrder(int32_t dir, std::stringstream &out)
+    {
+        ref = this;
+        Free();
+        session_id = 0;
+        state.dir = dir;
         this->out = &out;
     }
 
@@ -118,11 +130,31 @@ struct ScriptOrder
         state.status = PENDING_CANCEL;
     }
 
+    void HandleFreeState()
+    {
+        if (desired_amount < 0)
+        {
+            throw "desired_amount < 0";
+        }
+
+        //check some limits
+
+        if (desired_amount == 0)
+        {
+            return;
+        }
+        WriteNewOrder();
+    }
+
     void HandleNewState()
     {
         if (desired_price != state.price)
         {
-            WriteCancelOrder();
+            return WriteCancelOrder();
+        }
+        if (desired_amount == 0)
+        {
+            return WriteCancelOrder();
         }
     }
 
@@ -131,7 +163,7 @@ struct ScriptOrder
         switch (state.status)
         {
         case FREE:
-            WriteNewOrder();
+            HandleFreeState();
             break;
         case PENDING_NEW:
             break;
@@ -202,6 +234,17 @@ struct ScriptOrder
         assert(state.status == PENDING_CANCEL || state.status == NEW || state.status == CANCELED);
 
         state.remainingAmount -= trade.amount;
+
+        if (state.dir == 1)
+        {
+            total_money -= trade.amount * trade.deal_price;
+        }
+        else
+        {
+            total_money += trade.amount * trade.deal_price;
+        }
+
+        total_trades += trade.amount;
 
         assert(state.remainingAmount >= 0);
 
@@ -276,6 +319,12 @@ struct ScriptOrder
         state.status = FREE;
         state.orderid = 0;
         state.remainingAmount = 0;
+    }
+
+    void Print()
+    {
+        printf("[script-order] %s, dir = %d, price = %ld, amount = %d, remaingingAmount = %d \n",
+               GetStringOrderStatus(state.status).c_str(), state.dir, state.price, state.amount, state.remainingAmount);
     }
 };
 

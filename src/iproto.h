@@ -23,7 +23,6 @@
 
 #define MKT_DATA_L1 10001
 
-
 #define ORDERID_MULT 1000
 
 //send input to script and get answers + pass timestamps
@@ -32,6 +31,9 @@
 #define NEW 2
 #define PENDING_CANCEL 3
 #define CANCELED 4
+
+#define BUY 1
+#define SELL 2
 
 #define Reset "\x1b[0m"
 //#define Bright "\x1b[1m"
@@ -60,6 +62,33 @@
 //#define BgWhite \x1b[47m
 
 //for matching only need price, orderid, amount, action
+
+/*
+#define FREE 0
+#define PENDING_NEW 1
+#define NEW 2
+#define PENDING_CANCEL 3
+#define CANCELED 4
+
+*/
+std::string GetStringOrderStatus(int status)
+{
+    switch (status)
+    {
+    case FREE:
+        return "FREE";
+    case PENDING_NEW:
+        return "PENDING_NEW";
+    case NEW:
+        return "NEW";
+    case PENDING_CANCEL:
+        return "PENDING_CANCEL";
+    case CANCELED:
+        return "CANCELED";
+    default:
+        return "UNKNOWN";
+    }
+}
 
 struct NewOrder
 {

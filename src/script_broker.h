@@ -49,8 +49,8 @@ struct Node
     Node(DataStorage &storage, std::stringstream &out) : storage(&storage)
     {
         //this->storage = &storage;
-        buy = new ScriptOrder(out);
-        sell = new ScriptOrder(out);
+        buy = new ScriptOrder(BUY, out);
+        sell = new ScriptOrder(SELL, out);
         si = &sid_l1(1);
     }
 
@@ -62,6 +62,19 @@ struct Node
             buy->Update(si->bid, 1);
             sell->Update(si->ask, 1);
         }
+        else
+        {
+            buy->Update(0, 0);
+            sell->Update(0, 0);
+        }
+
+        Update();
+    }
+
+    void Update()
+    {
+        buy->Do();
+        sell->Do();
     }
 
     MktDataL1 &sid_l1(int id)
@@ -76,6 +89,15 @@ struct Node
 
     void sid(int type, std::string str_id)
     {
+    }
+
+    void Print()
+    {
+        buy->Print();
+        sell->Print();
+        int32_t position = buy->total_trades - sell->total_trades;
+        int64_t profit = buy->total_money + sell->total_money + position * (si->bid + si->ask) / 2;
+        printf("@@@@@@@@@@@@@@@@@@@@@@@@@@@ Profit = %ld, position = %d @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n", profit, position);
     }
 };
 
@@ -92,7 +114,7 @@ struct ScriptBroker : BasePipe
     DataStorage storage;
 
     std::stringstream in;
-    std::stringstream *out;
+    std::stringstream out;
     std::stringstream orders;
     std::stringstream response;
 
@@ -115,7 +137,7 @@ struct ScriptBroker : BasePipe
 
     void WriteMsgType(int msg_type)
     {
-        out->write((char *)&msg_type, sizeof(msg_type));
+        out.write((char *)&msg_type, sizeof(msg_type));
     }
 
     //system
@@ -140,16 +162,19 @@ struct ScriptBroker : BasePipe
         {
             if (msg_type == NEW_ORDER)
             {
+                std::cout << "READ NEW ORDER" << std::endl;
                 ScriptOrder *pointer;
-                out->read((char *)&pointer, sizeof(pointer));
+                orders.read((char *)&pointer, sizeof(pointer));
 
                 int new_ext_id = GenereateExtId();
                 NewOrder new_order;
-                out->read((char *)&new_order, sizeof(new_order));
+                orders.read((char *)&new_order, sizeof(new_order));
                 new_order.ext_id = new_ext_id;
-
+                std::cout << "Start Create Session" << std::endl;
                 OrderSession *session = &order2session[pointer];
+
                 session->order = pointer;
+                std::cout << "session" << std::endl;
                 session->external_ext_id = new_ext_id;
                 session->ext_id = new_order.ext_id;
                 extid2session.insert(std::pair<int64_t, OrderSession *>(new_ext_id, session));
@@ -159,20 +184,20 @@ struct ScriptBroker : BasePipe
                                                                                    .external_ext_id = new_ext_id}));*/
 
                 WriteMsgType(NEW_ORDER);
-                out->write((char *)&new_order, sizeof(new_order));
+                out.write((char *)&new_order, sizeof(new_order));
             }
             else if (msg_type == CANCEL_ORDER)
             {
 
                 ScriptOrder *pointer;
-                out->read((char *)&pointer, sizeof(pointer));
+                orders.read((char *)&pointer, sizeof(pointer));
 
                 //OrderSession *session = &order2session[pointer];
 
                 CancelOrder cancel_order;
-                out->read((char *)&cancel_order, sizeof(cancel_order));
+                orders.read((char *)&cancel_order, sizeof(cancel_order));
                 WriteMsgType(CANCEL_ORDER);
-                out->write((char *)&cancel_order, sizeof(cancel_order));
+                out.write((char *)&cancel_order, sizeof(cancel_order));
             }
         }
     }
@@ -236,7 +261,8 @@ struct ScriptBroker : BasePipe
     {
         ReadInput();
         node->Do();
-        //ReadOrders();
+        ReadOrders();
+        node->Print();
         //UpdateRoot();
     }
 
@@ -258,7 +284,10 @@ struct ScriptBroker : BasePipe
     {
         Do();
         std::cout << "[script-broket] data from storage " << storage.l1[1].bid << " " << storage.l1[1].ask << " " << &storage << std::endl;
-
+        if (out.tellp() > out.tellg())
+        {
+            stream << out.rdbuf();
+        }
         return *this;
     }
 

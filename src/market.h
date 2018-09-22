@@ -50,6 +50,11 @@ class Market : BasePipe
         reader = &rdr;
     }
 
+    Market(Reader *rdr)
+    {
+        reader = rdr;
+    }
+
     Market(std::string order_book)
     {
         this->operator<<(order_book);

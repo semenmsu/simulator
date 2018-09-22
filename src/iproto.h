@@ -23,6 +23,11 @@
 
 #define MKT_DATA_L1 10001
 
+//system
+#define SETTINGS_REQUEST 100001 //from simulator to strategy
+#define STRING_MSG 100002
+#define SET_PROPERTY_MSG 100003 //to strategy
+
 #define ORDERID_MULT 1000
 
 //send input to script and get answers + pass timestamps

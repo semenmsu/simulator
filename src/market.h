@@ -374,7 +374,7 @@ class Market : BasePipe
         orders.erase(it);
     }
 
-    int eraseOrder(const T &order)
+    int eraseOrder(const T &order, int *amount)
     {
         T t;
         t.orderid = order.orderid;
@@ -393,6 +393,7 @@ class Market : BasePipe
             t.orderid = it->orderid;
             t.price = it->price;
             typename BuySet::iterator buy_iter = buyOrders.find(t);
+            *amount = buy_iter->amount;
             //typename BuySet::iterator buy_iter = buyOrders.find({.orderid = it->orderid, .price = it->price});
             eraseBuy(buy_iter);
             return 0;
@@ -403,6 +404,7 @@ class Market : BasePipe
             t.orderid = it->orderid;
             t.price = it->price;
             typename SellSet::iterator sell_iter = sellOrders.find(t);
+            *amount = sell_iter->amount;
             //typename SellSet::iterator sell_iter = sellOrders.find({.orderid = it->orderid, .price = it->price});
             eraseSell(sell_iter);
             return 0;
@@ -414,7 +416,8 @@ class Market : BasePipe
         T copy = *order;
         copy.amount = new_amount;
         //eraseSell(order);
-        eraseOrder(*order);
+        int remaining_amount;
+        eraseOrder(*order, &remaining_amount);
         insertSellOrder(copy);
     }
 
@@ -423,7 +426,8 @@ class Market : BasePipe
         T copy = *order;
         copy.amount = new_amount;
         //eraseBuy(order);
-        eraseOrder(*order);
+        int remaining_amount;
+        eraseOrder(*order, &remaining_amount);
         insertBuyOrder(copy);
     }
 
@@ -482,14 +486,14 @@ void Market<T>::PlaceOrder(T &order)
 
     if (order.action == 0)
     {
-
-        int erase_error = eraseOrder(order);
+        int remaining_amount = 0;
+        int erase_error = eraseOrder(order, &remaining_amount);
         if (IsSimulatedUser(order))
         {
             if (erase_error == -1)
             {
                 //not found
-                struct CancelReply reply = {.ext_id = order.ext_id, .orderid = order.orderid, .code = ORDER_NOT_FOUND};
+                struct CancelReply reply = {.ext_id = order.ext_id, .orderid = order.orderid, .code = ORDER_NOT_FOUND, .amount = 0};
                 int msg_type = CANCEL_REPLY_MSG;
                 out.write((char *)&msg_type, sizeof(msg_type));
                 out.write((char *)&reply, sizeof(reply));
@@ -497,7 +501,7 @@ void Market<T>::PlaceOrder(T &order)
             else
             {
                 //found
-                struct CancelReply reply = {.ext_id = order.ext_id, .orderid = order.orderid, .code = 0};
+                struct CancelReply reply = {.ext_id = order.ext_id, .orderid = order.orderid, .code = 0, .amount = remaining_amount};
                 std::cout << reply;
                 int msg_type = CANCEL_REPLY_MSG;
                 out.write((char *)&msg_type, sizeof(msg_type));

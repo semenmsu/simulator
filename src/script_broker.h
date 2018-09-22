@@ -38,15 +38,61 @@ struct DataStorage
     }
 };
 
-struct Node
+class VNode
 {
+  public:
+    VNode *parent;
+    std::vector<VNode *> childs;
+    int id;
+    VNode *ref;
+
+    VNode()
+    {
+        ref = this;
+    }
+
+    VNode *GetRoot()
+    {
+
+        if (parent == nullptr)
+        {
+            return parent;
+        }
+        VNode *root = parent;
+        while (root->parent != nullptr)
+        {
+            root = root->parent;
+        }
+        return root;
+    }
+
+    virtual void Do(){};
+    virtual void Print(){};
+    virtual void SetProperty(std::string name, std::string value) {}
+
+    void GetMetaInfo()
+    {
+    }
+};
+
+#define STOP 0
+#define START 1
+#define CLOSE 2
+#define HARD_CLOSE 3 //use market order?
+class Spreader : public VNode
+{
+  public:
     DataStorage *storage;
     ScriptOrder *buy;
     ScriptOrder *sell;
 
+    int32_t status = STOP;
     MktDataL1 *si;
+    int32_t spread = 4;
+    int32_t max_buy = 1;
+    int32_t max_sell = 1;
 
-    Node(DataStorage &storage, std::stringstream &out) : storage(&storage)
+    Spreader(DataStorage &storage, std::stringstream &out) : storage(&storage)
     {
         //this->storage = &storage;
         buy = new ScriptOrder(BUY, out);
@@ -54,21 +100,96 @@ struct Node
         si = &sid_l1(1);
     }
 
-    void Do()
+    void Do() override
     {
-        if (si->is_ready)
+        Strategy();
+        Update();
+    }
+
+    void SetProperty(std::string name, std::string value) override
+    {
+        if (name == "spread")
         {
-            std::cout << "[node] " << si->bid << " " << si->ask << std::endl;
-            buy->Update(si->bid, 1);
-            sell->Update(si->ask, 1);
+            try
+            {
+                int32_t _spread = std::stoi(value);
+                spread = _spread;
+            }
+            catch (const std::exception &e)
+            {
+                std::cout << e.what();
+            }
+        }
+        else if (name == "status")
+        {
+            try
+            {
+                int32_t _status = std::stoi(value);
+                status = _status;
+            }
+            catch (const std::exception &e)
+            {
+                std::cout << e.what();
+            }
+        }
+    }
+
+    void Strategy()
+    {
+        int32_t position = buy->total_trades - sell->total_trades;
+
+        if (status == STOP)
+        {
+            max_buy = 0;
+            max_sell = 0;
+        }
+        else if (status == START)
+        {
+            max_buy = 1;
+            max_sell = 1;
+        }
+        else if (status == CLOSE)
+        {
+            if (position > 0)
+            {
+                max_buy = 0;
+            }
+            else if (position < 0)
+            {
+                max_sell = 0;
+            }
+            else
+            {
+                max_buy = 0;
+                max_sell = 0;
+            }
+        }
+
+        if (si->is_ready && si->bid < si->ask)
+        {
+            //std::cout << "[node] " << si->bid << " " << si->ask << std::endl;
+
+            if (position > 0)
+            {
+                buy->Update(0, 0);
+                sell->Update(si->ask + spread * 1000000, max_buy);
+            }
+            else if (position < 0)
+            {
+                buy->Update(si->bid - spread * 1000000, max_sell);
+                sell->Update(0, 0);
+            }
+            else
+            {
+                buy->Update(si->bid - spread * 1000000, max_buy);
+                sell->Update(si->ask + spread * 1000000, max_sell);
+            }
         }
         else
         {
             buy->Update(0, 0);
             sell->Update(0, 0);
         }
-
-        Update();
     }
 
     void Update()
@@ -97,7 +218,119 @@ struct Node
         sell->Print();
         int32_t position = buy->total_trades - sell->total_trades;
         int64_t profit = buy->total_money + sell->total_money + position * (si->bid + si->ask) / 2;
+        profit /= 1000000;
         printf("@@@@@@@@@@@@@@@@@@@@@@@@@@@ Profit = %ld, position = %d @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n", profit, position);
+    }
+};
+
+struct RootNode : public VNode
+{
+    DataStorage *storage;
+    std::stringstream *out;
+    std::unordered_map<int32_t, VNode *> nodes;
+
+    //Spreader *spreader;
+    //Spreader *spreader2;
+
+    RootNode(DataStorage &storage, std::stringstream &out) : storage(&storage), out(&out)
+    {
+        id = 1;
+        nodes.insert(std::pair<int32_t, VNode *>(id, this));
+        Initialization();
+        Build();
+    }
+
+    void Initialization()
+    {
+        Spreader *spreader = new Spreader(*storage, *out);
+        Spreader *spreader2 = new Spreader(*storage, *out);
+
+        spreader->SetProperty("spread", "6");
+
+        Mount(*spreader);
+        Mount(*spreader2);
+    }
+
+    void Mount(VNode &node)
+    {
+        nodes.insert(std::pair<int32_t, VNode *>(++id, &node));
+        childs.push_back(&node);
+    }
+
+    void Build()
+    {
+    }
+
+    void Do()
+    {
+        for (auto &child : childs)
+        {
+            child->Do();
+        }
+    }
+
+    void SetProperty(std::string name, std::string value) override
+    {
+
+        if (name == "status")
+        {
+            SetPropertyForAll(name, value);
+        }
+    }
+
+    void SetPropertyForAll(std::string name, std::string value)
+    {
+
+        for (auto &kvp : nodes)
+        {
+            if (kvp.second->id > 1)
+            {
+                kvp.second->SetProperty(name, value);
+            }
+        }
+    }
+
+    void SetStrategyProperty(int id, std::string name, std::string value)
+    {
+        if (nodes.count(id))
+        {
+            nodes[id]->SetProperty(name, value);
+        }
+        else
+        {
+            //response fail
+        }
+    }
+
+    void GetSchema()
+    {
+        std::string schema = R"(
+        
+        si-spreader:
+            type: spreader
+            symbol:
+                Si-12.16
+                    - OrderBook
+                    - 1minut
+            isin:
+                - 148131
+            params:
+                MaxAmount:
+                    initial: 20
+                    type: i
+                Limit: 10000
+                User: semen
+                Risk: Non
+
+        )";
+    }
+
+    void Print()
+    {
+        for (auto &child : childs)
+        {
+            child->Print();
+        }
     }
 };
 
@@ -124,10 +357,12 @@ struct ScriptBroker : BasePipe
     int64_t ext_id;
     int64_t ts;
 
-    Node *node;
+    Spreader *spreader;
+    RootNode *root;
     ScriptBroker()
     {
-        node = new Node(storage, orders);
+        //spreader = new Spreader(storage, orders);
+        root = new RootNode(storage, orders);
     }
 
     int64_t GenereateExtId()
@@ -260,9 +495,12 @@ struct ScriptBroker : BasePipe
     void Do()
     {
         ReadInput();
-        node->Do();
+        //spreader->Do();
+        root->Do();
         ReadOrders();
-        node->Print();
+        //spreader->Print();
+        root->Print();
+
         //UpdateRoot();
     }
 

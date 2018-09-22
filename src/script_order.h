@@ -226,6 +226,7 @@ struct ScriptOrder
             {
                 state.status = CANCELED; //wait trades
             }
+            state.status = FREE;
         }
     }
 
@@ -318,6 +319,8 @@ struct ScriptOrder
     {
         state.status = FREE;
         state.orderid = 0;
+        state.amount = 0;
+        state.price = 0;
         state.remainingAmount = 0;
     }
 

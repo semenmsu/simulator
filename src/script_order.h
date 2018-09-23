@@ -92,8 +92,8 @@ struct ScriptOrder
         info_request.ext_id = 0;
         symbol.copy(info_request.symbol, symbol.length());
         info_request.symbol[symbol.length()] = '\0';
-        std::cout << "[order] symbol" << symbol << std::endl;
-        std::cout << "[order] coded symbol " << info_request.symbol << std::endl;
+        //std::cout << "[order] symbol" << symbol << std::endl;
+        //std::cout << "[order] coded symbol " << info_request.symbol << std::endl;
         out->write((char *)&info_request, sizeof(info_request));
     }
 
@@ -142,7 +142,7 @@ struct ScriptOrder
 
         Write(new_order);
 
-        std::cout << "WRITE NEW ORDER \n";
+        //std::cout << "WRITE NEW ORDER \n";
     }
 
     void WriteCancelOrder()
@@ -153,7 +153,7 @@ struct ScriptOrder
         InitCancelOrder(cancel_order);
         Write(cancel_order);
 
-        std::cout << FgGreen << "[script] CANCEL_ORDER " << state.orderid << Reset << std::endl;
+        //std::cout << FgGreen << "[script] CANCEL_ORDER " << state.orderid << Reset << std::endl;
         state.status = PENDING_CANCEL;
     }
 
@@ -235,7 +235,7 @@ struct ScriptOrder
 
     void ReplyCancel(CancelReply &cancel_reply)
     {
-        std::cout << "[REPLY_CANCEL] amount " << cancel_reply.amount << std::endl;
+        //std::cout << "[REPLY_CANCEL] amount " << cancel_reply.amount << std::endl;
         assert(state.status == PENDING_CANCEL || state.status == NEW);
         if (cancel_reply.code == 0)
         {
@@ -294,14 +294,14 @@ struct ScriptOrder
 
     void ReplyInstrumentInfo(InstrumentInfoReply info_reply)
     {
-        std::cout << "@@@@@@@@[order] INSTRUMENT_INFO_REPLY\n";
+        //std::cout << "@@@@@@@@[order] INSTRUMENT_INFO_REPLY\n";
         if (!is_settings_loaded)
         {
             min_step_price = info_reply.min_step_price;
             isin_id = info_reply.isin_id;
             is_settings_loaded = 1;
         }
-        std::cout << "@@@@@@@@[order] INSTRUMENT_INFO_REPLY ISIN = " << isin_id << std::endl;
+        //std::cout << "@@@@@@@@[order] INSTRUMENT_INFO_REPLY ISIN = " << isin_id << std::endl;
     }
 
     void ProcessStringInput(std::string line)

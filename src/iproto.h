@@ -6,6 +6,10 @@
 #include <string>
 #include <sstream>
 
+#define DELTA_TIME 621355968000000000
+#define MKS 1000000
+#define TICK 10000000
+
 #define ORDER_NOT_FOUND 14
 #define CROSS_ORDER_ERR 31 //
 #define PRICE_OUTSIDE_LIMIT 32

@@ -65,6 +65,7 @@ struct DataPathResolver
     }
 } DataPathResolver;
 
+//One day simulator
 class Simulator : public BasePipe
 {
 
@@ -74,8 +75,13 @@ class Simulator : public BasePipe
 
   public:
     int64_t ts = 0;
+    int64_t start_time = 0;
+    int64_t stop_time = 0;
+    int64_t current_time = 0;
+    std::string date = "";
     std::stringstream in;
     std::stringstream out;
+    int32_t eof = 0;
 
     Simulator() {}
 
@@ -88,7 +94,7 @@ class Simulator : public BasePipe
         //strptime(time_details, "%Y-%m", &tm);
         strptime(time_details, "%Y%m%d", &tm);
 
-        std::cout << tm.tm_year + 1900 << " " << tm.tm_mon + 1 << " " << tm.tm_mday << std::endl;
+        //std::cout << tm.tm_year + 1900 << " " << tm.tm_mon + 1 << " " << tm.tm_mday << std::endl;
 
         std::string path = DataPathResolver.ResolveDb(settings.symbol, settings.date);
         std::string settings_path = DataPathResolver.ResolveSettings(settings.symbol, settings.date);
@@ -112,6 +118,18 @@ class Simulator : public BasePipe
 
     void RequestAddSymbol(SymbolSettings &settings, InstrumentInfoReply &info_reply)
     {
+        if (date == "")
+        {
+            date = settings.date;
+        }
+        else
+        {
+            if (date != settings.date)
+            {
+                printf("[simulator:RequestAddSymbol]%s date != other date %s \n", date.c_str(), settings.date.c_str());
+            }
+        }
+
         struct tm tm;
         memset(&tm, 0, sizeof(struct tm));
         const char *time_details = (const char *)settings.date.c_str();
@@ -119,7 +137,33 @@ class Simulator : public BasePipe
         //strptime(time_details, "%Y-%m", &tm);
         strptime(time_details, "%Y%m%d", &tm);
 
-        std::cout << tm.tm_year + 1900 << " " << tm.tm_mon + 1 << " " << tm.tm_mday << std::endl;
+        tm.tm_hour = 10;
+        tm.tm_min = 5;
+        tm.tm_sec = 0;
+
+        struct tm tm_stop;
+        //tm_stop = tm;
+        tm_stop.tm_year = tm.tm_year;
+        tm_stop.tm_mday = tm.tm_mday;
+        tm_stop.tm_mon = tm.tm_mon;
+        tm_stop.tm_hour = 19;
+        tm_stop.tm_min = 40;
+        tm_stop.tm_sec = 0;
+
+        time_t t = mktime(&tm);
+        time_t t_stop = mktime(&tm_stop);
+
+        start_time = t * TICK + DELTA_TIME;
+        current_time = start_time;
+        stop_time = t_stop * TICK + DELTA_TIME;
+        printf("%ld \n", start_time);
+        printf("%ld \n", stop_time);
+        //getchar();
+        char *dt = ctime(&t_stop);
+        printf("time = %s \n", dt);
+        //getchar();
+
+        //std::cout << tm.tm_year + 1900 << " " << tm.tm_mon + 1 << " " << tm.tm_mday << std::endl;
 
         std::string path = DataPathResolver.ResolveDb(settings.symbol, settings.date);
         std::string settings_path = DataPathResolver.ResolveSettings(settings.symbol, settings.date);
@@ -127,26 +171,17 @@ class Simulator : public BasePipe
         if (symbol2market.count(settings.symbol) == 0)
         {
             Reader *reader = new Reader(settings.symbol, path, settings_path);
-
             readers.insert(std::pair<int32_t, Reader *>(reader->Isin(), reader));
-
-            //Reader reader(settings.symbol, path, settings_path);
-            //Market<Order> *mkt = new Market<Order>(reader);
             Market<Order> *mkt = new Market<Order>(reader, &out);
             markets.insert(std::pair<int32_t, Market<Order> *>(reader->Isin(), mkt));
             symbol2market.insert(std::pair<std::string, Market<Order> *>(settings.symbol, mkt));
         }
-        std::cout << "min_step: " << symbol2market[settings.symbol]->reader->MinStep() << std::endl;
-        std::cout << "isin_id: " << symbol2market[settings.symbol]->reader->Isin() << std::endl;
+        //std::cout << "min_step: " << symbol2market[settings.symbol]->reader->MinStep() << std::endl;
+        //std::cout << "isin_id: " << symbol2market[settings.symbol]->reader->Isin() << std::endl;
         info_reply.isin_id = symbol2market[settings.symbol]->reader->Isin();
         info_reply.min_step_price = symbol2market[settings.symbol]->reader->MinStep();
 
         //std::cout << path << std::endl;
-
-        //time_t t = mktime(&tm);
-        //char *dt = ctime(&t);
-        //printf("%d \n", t);
-        //printf("time = %s \n", dt);
     }
 
     void AddSymbol(std::string symbol)
@@ -184,10 +219,60 @@ class Simulator : public BasePipe
                 break;
             }
         }*/
+
+        int64_t next_time = 0;
         for (auto i : markets)
         {
-            i.second->ReadOrderFile();
+            //i.second->ReadOrderFile();
+            int64_t _next_time = i.second->ReadOrderFile(current_time); //in C# 1tick = 100nano
+            if (_next_time == 0)
+            {
+                //std::cout << "_next_time == 0, this is impossible" << std::endl;
+                //getchar();
+            }
+            else
+            {
+                if (current_time > stop_time)
+                {
+                    time_t unix_time = (stop_time - DELTA_TIME) / 10000000;
+
+                    char *dt = ctime(&unix_time);
+                    std::cout << "@@@@@@@@@@@@@@@@@@@@@@@@@TIME " << dt;
+                    std::cout << "current " << current_time << std::endl;
+                    std::cout << "stop" << stop_time << std::endl;
+                    eof = 1;
+                    return;
+                }
+                if (next_time == 0)
+                {
+                    next_time = _next_time;
+                }
+                else if (next_time > _next_time)
+                {
+                    next_time = _next_time;
+                }
+                if (next_time <= current_time)
+                {
+                    std::cout << "next_time <= current_time, this is wrong" << std::endl;
+                    std::cout << "next_time " << next_time << std::endl;
+                    std::cout << "current_time" << current_time << std::endl;
+                    time_t unix_time = (current_time - DELTA_TIME) / 10000000;
+
+                    char *dt = ctime(&unix_time);
+                    std::cout << "TIME " << dt;
+                    getchar();
+                }
+            }
         }
+        //std::cout << "next_time " << next_time << std::endl;
+        //std::cout << "current_time" << current_time << std::endl;
+        //current_time += 10000000; //sec
+        //current_time += 1000000; //100ms
+        current_time += 100000; //10ms
+        //current_time += 1000; //1ms
+        current_time = std::max(next_time, current_time);
+
+        //getchar();
     }
 
     int ReadMessageType()
@@ -208,14 +293,14 @@ class Simulator : public BasePipe
     {
         int64_t ists;
         in.read((char *)&ists, sizeof(ists));
-        std::cout << "[simulator] read timestamp " << ists << std::endl;
+        //std::cout << "[simulator] read timestamp " << ists << std::endl;
     }
 
     void ReadInstrumentInfoRequest()
     {
         InstrumentInfoRequest info_request;
         in.read((char *)&info_request, sizeof(info_request));
-        printf("[simulator] symbol = %s\n", info_request.symbol);
+        //printf("[simulator] symbol = %s\n", info_request.symbol);
 
         InstrumentInfoReply info_reply;
         SymbolSettings symbol_settings = {.symbol = info_request.symbol, .date = "20161027"};
@@ -226,7 +311,7 @@ class Simulator : public BasePipe
         int msg_type = INSTRUMENT_INFO_REPLY;
         out.write((char *)&msg_type, sizeof(msg_type));
         out.write((char *)&info_reply, sizeof(info_reply));
-        std::cout << "put " << out.tellp() << "  get = " << out.tellg() << std::endl;
+        //std::cout << "put " << out.tellp() << "  get = " << out.tellg() << std::endl;
     }
 
     void ReadNewOrder()
@@ -254,25 +339,25 @@ class Simulator : public BasePipe
             switch (msg_type)
             {
             case EMPTY:
-                std::cout << "[simulator] EMPTY\n";
+                //std::cout << "[simulator] EMPTY\n";
                 //ResetIn();
                 break;
             case TIMESTAMP_MSG:
-                std::cout << "[simulator] TIMESTAMP_MSG\n";
+                //std::cout << "[simulator] TIMESTAMP_MSG\n";
                 ReadTimeStamp();
                 //getchar();
                 break;
             case NEW_ORDER:
-                std::cout << "[simulator] NEW_ORDER\n";
+                //std::cout << "[simulator] NEW_ORDER\n";
                 ReadNewOrder();
                 //getchar();
                 break;
             case CANCEL_ORDER:
-                std::cout << "[simulator] CANCEL_ORDER\n";
+                // std::cout << "[simulator] CANCEL_ORDER\n";
                 ReadCancelOrder();
                 break;
             case INSTRUMENT_INFO_REQUEST:
-                std::cout << "[simulator] INSTRUMENT_INFO_REQUEST\n";
+                //std::cout << "[simulator] INSTRUMENT_INFO_REQUEST\n";
                 ReadInstrumentInfoRequest();
                 //getchar();
                 break;
@@ -327,7 +412,7 @@ class Simulator : public BasePipe
     //make matching
     friend Simulator &operator>>(int ts, Simulator &market)
     {
-        std::cout << "update ts " << ts << std::endl;
+        //std::cout << "update ts " << ts << std::endl;
         market.ts = ts;
         return market;
     }

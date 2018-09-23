@@ -66,6 +66,7 @@ struct Order
     int64_t ext_id;
     int32_t amount;
     int32_t user_code; //16
+    int64_t ts;
     char action;
     char dir;
     char __padding[2];
@@ -91,6 +92,7 @@ struct Order
         action = source.action;
         dir = source.dir;
         user_code = source.user_code;
+        ts = source.moment;
     }
 
     Order &operator<<(std::string order)

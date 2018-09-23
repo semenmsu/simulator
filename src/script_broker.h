@@ -27,12 +27,12 @@ struct DataStorage
         quote->bid = data.bid;
         quote->ask = data.ask;
         quote->is_ready = 1;*/
-        std::cout << "Start Update L1" << std::endl;
+        //std::cout << "Start Update L1" << std::endl;
         MktDataL1 *quote = l1[data.isin_id];
         quote->bid = data.bid;
         quote->ask = data.ask;
         quote->is_ready = 1;
-        std::cout << "Update L1 " << data.isin_id << " " << data.bid << " " << data.ask << std::endl;
+        //std::cout << "Update L1 " << data.isin_id << " " << data.bid << " " << data.ask << std::endl;
         //getchar();
     }
 
@@ -83,7 +83,7 @@ struct DataStorage
     void ReplyInstrumentInfo(InstrumentInfoReply info_reply)
     {
         std::string symbol(info_reply.symbol);
-        std::cout << "[data-storeage] ReplyInstrumentInfo " << symbol << std::endl;
+        //std::cout << "[data-storeage] ReplyInstrumentInfo " << symbol << std::endl;
         if (symbol2BestBidAsk.count(symbol) == 0)
         {
             MktDataL1 bidask;
@@ -252,11 +252,11 @@ class Spreader : public VNode
             }
         }
 
-        if (si->is_ready)
+        /*if (si->is_ready)
         {
             std::cout << "[spreader] si.bid / si.ask = " << si->bid << " " << si->ask << "  status = " << status << std::endl;
             //getchar();
-        }
+        }*/
 
         if (si->is_ready && si->bid < si->ask)
         {
@@ -346,18 +346,21 @@ struct RootNode : public VNode
 
     void Initialization()
     {
-        Spreader *spreader = new Spreader(*storage, *out);
+        Spreader *spreader = new Spreader("Si-12.16", *storage, *out);
+        Spreader *spreader2 = new Spreader("RTS-12.16", *storage, *out);
         //SpreaderSber *spreader2 = new SpreaderSber(*storage, *out);
-        Spreader *spreader2 = new Spreader("SBRF-12.16", *storage, *out);
-        Spreader *spreader3 = new Spreader("RTS-12.16", *storage, *out);
+        //Spreader *spreader2 = new Spreader("SBRF-12.16", *storage, *out);
+        //Spreader *spreader3 = new Spreader("RTS-12.16", *storage, *out);
 
-        spreader->SetProperty("spread", "3");
-        spreader2->SetProperty("spread", "6");
-        spreader3->SetProperty("spread", "40");
+        spreader->SetProperty("spread", "15");
+        //spreader2->SetProperty("spread", "50");
+        //spreader2->SetProperty("spread", "15");
+        //spreader3->SetProperty("spread", "100");
 
         Mount(*spreader);
-        Mount(*spreader2);
-        Mount(*spreader3);
+        //Mount(*spreader2);
+        // Mount(*spreader2);
+        // Mount(*spreader3);
     }
 
     void Mount(VNode &node)
@@ -519,7 +522,7 @@ struct ScriptBroker : public BasePipe
         {
             if (msg_type == NEW_ORDER)
             {
-                std::cout << "READ NEW ORDER" << std::endl;
+                //std::cout << "READ NEW ORDER" << std::endl;
                 ScriptOrder *pointer;
                 orders.read((char *)&pointer, sizeof(pointer));
 
@@ -527,11 +530,11 @@ struct ScriptBroker : public BasePipe
                 NewOrder new_order;
                 orders.read((char *)&new_order, sizeof(new_order));
                 new_order.ext_id = new_ext_id;
-                std::cout << "Start Create Session" << std::endl;
+                //std::cout << "Start Create Session" << std::endl;
                 OrderSession *session = &order2session[pointer];
 
                 session->order = pointer;
-                std::cout << "session" << std::endl;
+                //std::cout << "session" << std::endl;
                 session->external_ext_id = new_ext_id;
                 session->ext_id = new_order.ext_id;
                 extid2session.insert(std::pair<int64_t, OrderSession *>(new_ext_id, session));
@@ -558,7 +561,7 @@ struct ScriptBroker : public BasePipe
             }
             else if (msg_type == INSTRUMENT_INFO_REQUEST)
             {
-                std::cout << "READ REQUEST INFO" << std::endl;
+                //std::cout << "READ REQUEST INFO" << std::endl;
                 ScriptOrder *pointer;
                 orders.read((char *)&pointer, sizeof(pointer));
 
@@ -592,8 +595,8 @@ struct ScriptBroker : public BasePipe
 
         while ((msg_type = ReadMessageType(in)) != EMPTY)
         {
-            std::cout << "put " << in.tellp() << "  get = " << in.tellg() << std::endl;
-            std::cout << "[broker]!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!ReadInput msg_type " << msg_type << std::endl;
+            //std::cout << "put " << in.tellp() << "  get = " << in.tellg() << std::endl;
+            //std::cout << "[broker]!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!ReadInput msg_type " << msg_type << std::endl;
             if (msg_type == NEW_REPLY_MSG)
             {
                 NewReply new_reply;
@@ -628,7 +631,7 @@ struct ScriptBroker : public BasePipe
             }
             else if (msg_type == INSTRUMENT_INFO_REPLY)
             {
-                std::cout << "[broker] INSTRUMENT_INFO_REPLY\n";
+                //std::cout << "[broker] INSTRUMENT_INFO_REPLY\n";
                 InstrumentInfoReply info_reply;
                 in.read((char *)&info_reply, sizeof(info_reply));
 
@@ -664,7 +667,7 @@ struct ScriptBroker : public BasePipe
     void UpdateRoot()
     {
     }
-
+    int64_t count = 0;
     void Do()
     {
         ReadInput();
@@ -672,8 +675,13 @@ struct ScriptBroker : public BasePipe
         root->Do();
         ReadOrders();
         //spreader->Print();
-        root->Print();
-
+        //root->Print();
+        count++;
+        if (count > 10000)
+        {
+            root->Print();
+            count = 0;
+        }
         //UpdateRoot();
     }
 
@@ -704,7 +712,7 @@ struct ScriptBroker : public BasePipe
 
     std::stringstream &In() override
     {
-        std::cout << "GET IN STREAM" << std::endl;
+        //std::cout << "GET IN STREAM" << std::endl;
         return in;
     };
 };

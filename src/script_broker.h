@@ -69,6 +69,7 @@ class VNode
     virtual void Do(){};
     virtual void Print(){};
     virtual void SetProperty(std::string name, std::string value) {}
+    virtual void RequestSettings(){};
 
     void GetMetaInfo()
     {
@@ -95,8 +96,8 @@ class Spreader : public VNode
     Spreader(DataStorage &storage, std::stringstream &out) : storage(&storage)
     {
         //this->storage = &storage;
-        buy = new ScriptOrder(BUY, out);
-        sell = new ScriptOrder(SELL, out);
+        buy = new ScriptOrder("Si-12.16", BUY, out);
+        sell = new ScriptOrder("Si-12.16", SELL, out);
         si = &sid_l1(1);
     }
 
@@ -212,6 +213,12 @@ class Spreader : public VNode
     {
     }
 
+    void RequestSettings()
+    {
+        buy->RequestInstrumentInfo();
+        sell->RequestInstrumentInfo();
+    }
+
     void Print()
     {
         buy->Print();
@@ -248,7 +255,7 @@ struct RootNode : public VNode
         spreader->SetProperty("spread", "6");
 
         Mount(*spreader);
-        Mount(*spreader2);
+        //Mount(*spreader2);
     }
 
     void Mount(VNode &node)
@@ -325,6 +332,14 @@ struct RootNode : public VNode
         )";
     }
 
+    void RequestSettings()
+    {
+        for (auto &child : childs)
+        {
+            child->RequestSettings();
+        }
+    }
+
     void Print()
     {
         for (auto &child : childs)
@@ -334,7 +349,7 @@ struct RootNode : public VNode
     }
 };
 
-struct ScriptBroker : BasePipe
+struct ScriptBroker : public BasePipe
 {
 
     struct OrderSession
@@ -363,6 +378,8 @@ struct ScriptBroker : BasePipe
     {
         //spreader = new Spreader(storage, orders);
         root = new RootNode(storage, orders);
+        root->RequestSettings();
+        ext_id = 1000;
     }
 
     int64_t GenereateExtId()
@@ -434,6 +451,25 @@ struct ScriptBroker : BasePipe
                 WriteMsgType(CANCEL_ORDER);
                 out.write((char *)&cancel_order, sizeof(cancel_order));
             }
+            else if (msg_type == INSTRUMENT_INFO_REQUEST)
+            {
+                std::cout << "READ REQUEST INFO" << std::endl;
+                ScriptOrder *pointer;
+                orders.read((char *)&pointer, sizeof(pointer));
+
+                int new_ext_id = GenereateExtId();
+
+                InstrumentInfoRequest info_request;
+                orders.read((char *)&info_request, sizeof(info_request));
+                info_request.ext_id = new_ext_id;
+
+                OrderSession *session = &order2session[pointer];
+                session->order = pointer;
+                extid2session.insert(std::pair<int64_t, OrderSession *>(new_ext_id, session));
+
+                WriteMsgType(INSTRUMENT_INFO_REQUEST);
+                out.write((char *)&info_request, sizeof(info_request));
+            }
         }
     }
 
@@ -448,8 +484,11 @@ struct ScriptBroker : BasePipe
     void ReadInput()
     {
         int msg_type;
+
         while ((msg_type = ReadMessageType(in)) != EMPTY)
         {
+            std::cout << "put " << in.tellp() << "  get = " << in.tellg() << std::endl;
+            std::cout << "[broker]!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!ReadInput msg_type " << msg_type << std::endl;
             if (msg_type == NEW_REPLY_MSG)
             {
                 NewReply new_reply;
@@ -482,7 +521,35 @@ struct ScriptBroker : BasePipe
             {
                 ReadMarketDataL1();
             }
+            else if (msg_type == INSTRUMENT_INFO_REPLY)
+            {
+                std::cout << "[broker] INSTRUMENT_INFO_REPLY\n";
+                InstrumentInfoReply info_reply;
+                in.read((char *)&info_reply, sizeof(info_reply));
+
+                if (info_reply.ext_id != 0)
+                {
+                    OrderSession *session = extid2session[info_reply.ext_id];
+                    session->order->ReplyInstrumentInfo(info_reply);
+                    extid2session.erase(info_reply.ext_id);
+                }
+                else
+                {
+                    //idea about reserved ext_id
+                    //global info (usually for storage)
+                }
+            }
+            else
+            {
+                std::cout << "unknow msg_type" << msg_type << std::endl;
+                throw "Unknown msg_type";
+            }
         }
+        std::cout << "[broker] !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! status = " << in.rdstate() << std::endl;
+        std::cout << "[broker] !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! isbad = " << in.bad() << std::endl;
+        std::cout << "[broker] !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! iseof = " << in.eof() << std::endl;
+        std::cout << "[broker] !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! isfail = " << in.fail() << std::endl;
+        getchar();
 
         //in->seekg(0, std::ios::beg);
         //in->seekp(0, std::ios::beg);
@@ -531,6 +598,7 @@ struct ScriptBroker : BasePipe
 
     std::stringstream &In() override
     {
+        std::cout << "GET IN STREAM" << std::endl;
         return in;
     };
 };

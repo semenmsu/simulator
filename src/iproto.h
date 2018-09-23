@@ -20,13 +20,18 @@
 #define TRADE_MSG 4
 #define NEW_ORDER 101
 #define CANCEL_ORDER 102
-
-#define MKT_DATA_L1 10001
+#define INSTRUMENT_INFO_REQUEST 201
+#define INSTRUMENT_INFO_REPLY 202
+#define SET_PROPERTY_MSG 203
+#define GET_PROPERTY_MSG 204
+#define PROPERTY_VALUE_MSG 205
 
 //system
-#define SETTINGS_REQUEST 100001 //from simulator to strategy
-#define STRING_MSG 100002
-#define SET_PROPERTY_MSG 100003 //to strategy
+//#define SETTINGS_REQUEST 100001 //from simulator to strategy
+//#define STRING_MSG 100002
+//#define SET_PROPERTY_MSG 100003 //to strategy
+
+#define MKT_DATA_L1 10001
 
 #define ORDERID_MULT 1000
 
@@ -228,6 +233,19 @@ struct MktDataL1
     MktDataL1() : bid(0), ask(0), is_ready(0)
     {
     }
+} __attribute__((packed, aligned(4)));
+
+struct InstrumentInfoRequest
+{
+    int64_t ext_id;
+    char symbol[32];
+} __attribute__((packed, aligned(4)));
+
+struct InstrumentInfoReply
+{
+    int64_t ext_id;
+    int32_t isin_id;
+    int64_t min_step_price;
 } __attribute__((packed, aligned(4)));
 
 struct BasePipe

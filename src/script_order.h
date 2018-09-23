@@ -26,12 +26,16 @@ struct ScriptOrder
         int32_t dir = 1;
     } state;
 
+    std::string symbol;
     int64_t desired_price = 0;
     int32_t desired_amount = 0;
     int64_t session_id = 0;
     int64_t total_money = 0;
     int64_t total_trades = 0;
     int64_t volume = 0;
+    int32_t is_settings_loaded = 0;
+    int64_t min_step_price = 1;
+    int32_t isin_id = 1;
 
     std::stringstream *out;
     ScriptOrder *ref;
@@ -60,6 +64,16 @@ struct ScriptOrder
         this->out = &out;
     }
 
+    ScriptOrder(std::string symbol, int32_t dir, std::stringstream &out)
+    {
+        this->symbol = symbol;
+        ref = this;
+        Free();
+        session_id = 0;
+        state.dir = dir;
+        this->out = &out;
+    }
+
     void WriteMsgType(int msg_type)
     {
         out->write((char *)&msg_type, sizeof(msg_type));
@@ -68,6 +82,19 @@ struct ScriptOrder
     void WriteOrderPointer()
     {
         out->write((char *)&ref, sizeof(ref));
+    }
+
+    void RequestInstrumentInfo()
+    {
+        WriteMsgType(INSTRUMENT_INFO_REQUEST);
+        WriteOrderPointer();
+        InstrumentInfoRequest info_request;
+        info_request.ext_id = 0;
+        symbol.copy(info_request.symbol, symbol.length());
+        info_request.symbol[symbol.length()] = '\0';
+        std::cout << "[order] symbol" << symbol << std::endl;
+        std::cout << "[order] coded symbol " << info_request.symbol << std::endl;
+        out->write((char *)&info_request, sizeof(info_request));
     }
 
     void Write(NewOrder &new_order)
@@ -87,9 +114,9 @@ struct ScriptOrder
     void InitNewOrder(NewOrder &new_order)
     {
         new_order.user_code = 1;
-        new_order.isin_id = 1;
+        new_order.isin_id = isin_id;
         new_order.ext_id = 0;
-        new_order.price = desired_price;
+        new_order.price = desired_price; //min_step_price, normilize price or not??
         new_order.amount = desired_amount;
         new_order.dir = state.dir;
     }
@@ -97,7 +124,7 @@ struct ScriptOrder
     void InitCancelOrder(CancelOrder &cancel_order)
     {
         cancel_order.user_code = 1;
-        cancel_order.isin_id = 1;
+        cancel_order.isin_id = isin_id;
         cancel_order.orderid = state.orderid;
     }
 
@@ -160,6 +187,9 @@ struct ScriptOrder
 
     void Do()
     {
+        if (!is_settings_loaded)
+            return;
+
         switch (state.status)
         {
         case FREE:
@@ -260,6 +290,18 @@ struct ScriptOrder
                 Free();
             }
         }
+    }
+
+    void ReplyInstrumentInfo(InstrumentInfoReply info_reply)
+    {
+        std::cout << "@@@@@@@@[order] INSTRUMENT_INFO_REPLY\n";
+        if (!is_settings_loaded)
+        {
+            min_step_price = info_reply.min_step_price;
+            isin_id = info_reply.isin_id;
+            is_settings_loaded = 1;
+        }
+        std::cout << "@@@@@@@@[order] INSTRUMENT_INFO_REPLY ISIN = " << isin_id << std::endl;
     }
 
     void ProcessStringInput(std::string line)

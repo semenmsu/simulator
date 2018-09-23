@@ -70,10 +70,13 @@ class Simulator : public BasePipe
 
     std::unordered_map<int32_t, Reader *> readers;
     std::unordered_map<int32_t, Market<Order> *> markets;
-    int32_t ts = 0;
-    std::stringstream in;
+    std::unordered_map<std::string, Market<Order> *> symbol2market;
 
   public:
+    int64_t ts = 0;
+    std::stringstream in;
+    std::stringstream out;
+
     Simulator() {}
 
     void AddSymbol(SymbolSettings &settings)
@@ -98,6 +101,45 @@ class Simulator : public BasePipe
         //Market<Order> *mkt = new Market<Order>(reader);
         Market<Order> *mkt = new Market<Order>(reader);
         markets.insert(std::pair<int32_t, Market<Order> *>(reader->Isin(), mkt));
+
+        //std::cout << path << std::endl;
+
+        //time_t t = mktime(&tm);
+        //char *dt = ctime(&t);
+        //printf("%d \n", t);
+        //printf("time = %s \n", dt);
+    }
+
+    void RequestAddSymbol(SymbolSettings &settings, InstrumentInfoReply &info_reply)
+    {
+        struct tm tm;
+        memset(&tm, 0, sizeof(struct tm));
+        const char *time_details = (const char *)settings.date.c_str();
+        printf("%s \n", time_details);
+        //strptime(time_details, "%Y-%m", &tm);
+        strptime(time_details, "%Y%m%d", &tm);
+
+        std::cout << tm.tm_year + 1900 << " " << tm.tm_mon + 1 << " " << tm.tm_mday << std::endl;
+
+        std::string path = DataPathResolver.ResolveDb(settings.symbol, settings.date);
+        std::string settings_path = DataPathResolver.ResolveSettings(settings.symbol, settings.date);
+
+        if (symbol2market.count(settings.symbol) == 0)
+        {
+            Reader *reader = new Reader(settings.symbol, path, settings_path);
+
+            readers.insert(std::pair<int32_t, Reader *>(reader->Isin(), reader));
+
+            //Reader reader(settings.symbol, path, settings_path);
+            //Market<Order> *mkt = new Market<Order>(reader);
+            Market<Order> *mkt = new Market<Order>(reader);
+            markets.insert(std::pair<int32_t, Market<Order> *>(reader->Isin(), mkt));
+            symbol2market.insert(std::pair<std::string, Market<Order> *>(settings.symbol, mkt));
+        }
+        std::cout << "min_step: " << symbol2market[settings.symbol]->reader->MinStep() << std::endl;
+        std::cout << "isin_id: " << symbol2market[settings.symbol]->reader->Isin() << std::endl;
+        info_reply.isin_id = symbol2market[settings.symbol]->reader->Isin();
+        info_reply.min_step_price = symbol2market[settings.symbol]->reader->MinStep();
 
         //std::cout << path << std::endl;
 
@@ -148,9 +190,113 @@ class Simulator : public BasePipe
         }
     }
 
+    int ReadMessageType()
+    {
+        if (in.tellg() < in.tellp())
+        {
+            int msg_type;
+            in.read((char *)&msg_type, sizeof(msg_type));
+            return msg_type;
+        }
+        else
+        {
+            return EMPTY;
+        }
+    }
+
+    void ReadTimeStamp()
+    {
+        int64_t ists;
+        in.read((char *)&ists, sizeof(ists));
+        std::cout << "[simulator] read timestamp " << ists << std::endl;
+    }
+
+    void ReadInstrumentInfoRequest()
+    {
+        InstrumentInfoRequest info_request;
+        in.read((char *)&info_request, sizeof(info_request));
+        printf("[simulator] symbol = %s\n", info_request.symbol);
+        InstrumentInfoReply info_reply;
+        SymbolSettings symbol_settings = {.symbol = info_request.symbol, .date = "20161027"};
+        RequestAddSymbol(symbol_settings, info_reply);
+        info_reply.ext_id = info_request.ext_id;
+
+        int msg_type = INSTRUMENT_INFO_REPLY;
+        out.write((char *)&msg_type, sizeof(msg_type));
+        out.write((char *)&info_reply, sizeof(info_reply));
+        std::cout << "put " << out.tellp() << "  get = " << out.tellg() << std::endl;
+    }
+
+    void ReadInputStream()
+    {
+        //read input stream
+        while (true)
+        {
+            int msg_type = ReadMessageType();
+            switch (msg_type)
+            {
+            case EMPTY:
+                std::cout << "[simulator] EMPTY\n";
+                //ResetIn();
+                break;
+            case TIMESTAMP_MSG:
+                std::cout << "[simulator] TIMESTAMP_MSG\n";
+                //ReadTimeStamp();
+                getchar();
+                break;
+            case NEW_ORDER:
+                std::cout << "[simulator] NEW_ORDER\n";
+                //ReadNewOrder();
+                getchar();
+                break;
+            case CANCEL_ORDER:
+                std::cout << "[simulator] CANCEL_ORDER\n";
+                //ReadCancelOrder();
+                break;
+            case INSTRUMENT_INFO_REQUEST:
+                std::cout << "[simulator] INSTRUMENT_INFO_REQUEST\n";
+                ReadInstrumentInfoRequest();
+                getchar();
+                break;
+
+            default:
+                throw "unknow state";
+            }
+
+            if (msg_type == EMPTY)
+            {
+                break;
+            }
+        }
+    }
+
+    void WriteTimeStamp(std::stringstream &stream)
+    {
+        int msg_type = TIMESTAMP_MSG;
+        stream.write((char *)&msg_type, sizeof(msg_type));
+        stream.write((char *)&ts, sizeof(ts));
+    }
+
     BasePipe &operator|(BasePipe &to) override
     {
-        ReadOrderFile();
+        WriteTimeStamp(to.In());
+        ReadInputStream();
+        //ReadOrderFile();
+        if (out.tellp() > out.tellg())
+        {
+            std::cout << "COPY  TO SCRIPT BROKER"
+                      << "out.tellg() = " << out.tellg()
+                      << "out.tellp() = " << out.tellp() << std::endl;
+            //std::cout << out.rdbuf() << std::endl;
+            to.In() << out.rdbuf(); //copy
+            std::cout << "TO_IN TO SCRIPT BROKER"
+                      << "to.in.tellg() = " << to.In().tellg()
+                      << "to.in.tellp() = " << to.In().tellp() << std::endl;
+            std::cout << "AFTER TO SCRIPT BROKER"
+                      << "out.tellg() = " << out.tellg()
+                      << "out.tellp() = " << out.tellp() << std::endl;
+            getchar();
+        }
         return to;
     }
 

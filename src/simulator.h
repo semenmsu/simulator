@@ -132,7 +132,7 @@ class Simulator : public BasePipe
 
             //Reader reader(settings.symbol, path, settings_path);
             //Market<Order> *mkt = new Market<Order>(reader);
-            Market<Order> *mkt = new Market<Order>(reader);
+            Market<Order> *mkt = new Market<Order>(reader, &out);
             markets.insert(std::pair<int32_t, Market<Order> *>(reader->Isin(), mkt));
             symbol2market.insert(std::pair<std::string, Market<Order> *>(settings.symbol, mkt));
         }
@@ -216,15 +216,33 @@ class Simulator : public BasePipe
         InstrumentInfoRequest info_request;
         in.read((char *)&info_request, sizeof(info_request));
         printf("[simulator] symbol = %s\n", info_request.symbol);
+
         InstrumentInfoReply info_reply;
         SymbolSettings symbol_settings = {.symbol = info_request.symbol, .date = "20161027"};
         RequestAddSymbol(symbol_settings, info_reply);
         info_reply.ext_id = info_request.ext_id;
+        strcpy(info_reply.symbol, info_request.symbol);
 
         int msg_type = INSTRUMENT_INFO_REPLY;
         out.write((char *)&msg_type, sizeof(msg_type));
         out.write((char *)&info_reply, sizeof(info_reply));
         std::cout << "put " << out.tellp() << "  get = " << out.tellg() << std::endl;
+    }
+
+    void ReadNewOrder()
+    {
+
+        NewOrder new_order;
+        in.read((char *)&new_order, sizeof(new_order));
+        markets[new_order.isin_id]->ReadNewOrder(new_order);
+    }
+
+    void ReadCancelOrder()
+    {
+
+        CancelOrder cancel_order;
+        in.read((char *)&cancel_order, sizeof(cancel_order));
+        markets[cancel_order.isin_id]->ReadCancelOrder(cancel_order);
     }
 
     void ReadInputStream()
@@ -241,22 +259,22 @@ class Simulator : public BasePipe
                 break;
             case TIMESTAMP_MSG:
                 std::cout << "[simulator] TIMESTAMP_MSG\n";
-                //ReadTimeStamp();
-                getchar();
+                ReadTimeStamp();
+                //getchar();
                 break;
             case NEW_ORDER:
                 std::cout << "[simulator] NEW_ORDER\n";
-                //ReadNewOrder();
-                getchar();
+                ReadNewOrder();
+                //getchar();
                 break;
             case CANCEL_ORDER:
                 std::cout << "[simulator] CANCEL_ORDER\n";
-                //ReadCancelOrder();
+                ReadCancelOrder();
                 break;
             case INSTRUMENT_INFO_REQUEST:
                 std::cout << "[simulator] INSTRUMENT_INFO_REQUEST\n";
                 ReadInstrumentInfoRequest();
-                getchar();
+                //getchar();
                 break;
 
             default:
@@ -280,22 +298,23 @@ class Simulator : public BasePipe
     BasePipe &operator|(BasePipe &to) override
     {
         WriteTimeStamp(to.In());
+        ReadOrderFile();
         ReadInputStream();
         //ReadOrderFile();
         if (out.tellp() > out.tellg())
         {
-            std::cout << "COPY  TO SCRIPT BROKER"
+            /*std::cout << "COPY  TO SCRIPT BROKER"
                       << "out.tellg() = " << out.tellg()
-                      << "out.tellp() = " << out.tellp() << std::endl;
+                      << "out.tellp() = " << out.tellp() << std::endl;*/
             //std::cout << out.rdbuf() << std::endl;
             to.In() << out.rdbuf(); //copy
-            std::cout << "TO_IN TO SCRIPT BROKER"
+            /*std::cout << "TO_IN TO SCRIPT BROKER"
                       << "to.in.tellg() = " << to.In().tellg()
                       << "to.in.tellp() = " << to.In().tellp() << std::endl;
             std::cout << "AFTER TO SCRIPT BROKER"
                       << "out.tellg() = " << out.tellg()
                       << "out.tellp() = " << out.tellp() << std::endl;
-            getchar();
+            //getchar();*/
         }
         return to;
     }

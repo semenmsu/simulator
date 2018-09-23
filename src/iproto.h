@@ -45,6 +45,12 @@
 #define BUY 1
 #define SELL 2
 
+//strategy regime
+#define STOP 0
+#define START 1
+#define CLOSE 2
+#define HARD_CLOSE 3 //use market order?
+
 #define Reset "\x1b[0m"
 //#define Bright "\x1b[1m"
 //#define Dim \x1b[2m
@@ -245,6 +251,7 @@ struct InstrumentInfoReply
 {
     int64_t ext_id;
     int32_t isin_id;
+    char symbol[32];
     int64_t min_step_price;
 } __attribute__((packed, aligned(4)));
 

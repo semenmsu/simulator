@@ -16,25 +16,94 @@
 
 struct DataStorage
 {
-    std::unordered_map<int32_t, MktDataL1> l1;
+    std::unordered_map<std::string, MktDataL1> symbol2BestBidAsk;
+    std::unordered_map<int32_t, MktDataL1 *> l1;
 
     void UpdateL1(MktDataL1 &data)
     {
+        /*
         std::cout << "try update" << std::endl;
         MktDataL1 *quote = &l1[data.isin_id];
         quote->bid = data.bid;
         quote->ask = data.ask;
+        quote->is_ready = 1;*/
+        std::cout << "Start Update L1" << std::endl;
+        MktDataL1 *quote = l1[data.isin_id];
+        quote->bid = data.bid;
+        quote->ask = data.ask;
         quote->is_ready = 1;
+        std::cout << "Update L1 " << data.isin_id << " " << data.bid << " " << data.ask << std::endl;
+        //getchar();
     }
 
     MktDataL1 &RegisterL1(MktDataL1 &data)
     {
-        MktDataL1 &quote = l1[data.isin_id];
+        /*MktDataL1 &quote = l1[data.isin_id];
         quote.isin_id = data.isin_id;
         quote.bid = 0;
         quote.ask = 0;
         quote.is_ready = 0;
-        return quote;
+        return quote;*/
+        MktDataL1 l1;
+        return l1;
+    }
+
+    MktDataL1 &RegisterL1(std::string symbol)
+    {
+        if (symbol2BestBidAsk.count(symbol) == 0)
+        {
+            MktDataL1 l1;
+            symbol2BestBidAsk[symbol] = l1;
+            return symbol2BestBidAsk[symbol];
+            //symbol2BestBidAsk.insert(std::pair<std::string, MktDataL1>(symbol))
+        }
+        else
+        {
+            return symbol2BestBidAsk[symbol];
+        }
+    }
+
+    //write to out all request for marketdata
+    //ext_id = 0, this is for data storage
+    void RequestInstrumentInfo(std::stringstream &out)
+    {
+        for (auto &kvp : symbol2BestBidAsk)
+        {
+            InstrumentInfoRequest info_request;
+            std::string symbol = kvp.first;
+            symbol.copy(info_request.symbol, symbol.length());
+            info_request.symbol[symbol.length()] = '\0';
+            info_request.ext_id = 0;
+            int msg_type = INSTRUMENT_INFO_REQUEST;
+            out.write((char *)&msg_type, sizeof(msg_type));
+            out.write((char *)&info_request, sizeof(info_request));
+        }
+    }
+
+    void ReplyInstrumentInfo(InstrumentInfoReply info_reply)
+    {
+        std::string symbol(info_reply.symbol);
+        std::cout << "[data-storeage] ReplyInstrumentInfo " << symbol << std::endl;
+        if (symbol2BestBidAsk.count(symbol) == 0)
+        {
+            MktDataL1 bidask;
+            bidask.isin_id = info_reply.isin_id;
+            symbol2BestBidAsk[symbol] = bidask;
+
+            if (l1.count(info_reply.isin_id) == 0)
+            {
+                l1[info_reply.isin_id] = &symbol2BestBidAsk[symbol];
+            }
+        }
+        else
+        {
+            symbol2BestBidAsk[symbol].isin_id = info_reply.isin_id;
+            if (l1.count(info_reply.isin_id) == 0)
+            {
+                l1[info_reply.isin_id] = &symbol2BestBidAsk[symbol];
+            }
+        }
+        //getchar();
     }
 };
 
@@ -76,10 +145,6 @@ class VNode
     }
 };
 
-#define STOP 0
-#define START 1
-#define CLOSE 2
-#define HARD_CLOSE 3 //use market order?
 class Spreader : public VNode
 {
   public:
@@ -93,12 +158,26 @@ class Spreader : public VNode
     int32_t max_buy = 1;
     int32_t max_sell = 1;
 
+    int64_t cycle_count = 0;
+    std::string symbol;
+
     Spreader(DataStorage &storage, std::stringstream &out) : storage(&storage)
     {
         //this->storage = &storage;
         buy = new ScriptOrder("Si-12.16", BUY, out);
         sell = new ScriptOrder("Si-12.16", SELL, out);
-        si = &sid_l1(1);
+        //si = &sid_l1(1);
+        si = &sid("Si-12.16");
+    }
+
+    Spreader(std::string symbol, DataStorage &storage, std::stringstream &out) : storage(&storage)
+    {
+        //this->storage = &storage;
+        buy = new ScriptOrder(symbol, BUY, out);
+        sell = new ScriptOrder(symbol, SELL, out);
+        //si = &sid_l1(1);
+        this->symbol = symbol;
+        si = &sid(symbol);
     }
 
     void Do() override
@@ -137,6 +216,13 @@ class Spreader : public VNode
 
     void Strategy()
     {
+        cycle_count++;
+
+        if (cycle_count > 20)
+        {
+            status = START;
+        }
+
         int32_t position = buy->total_trades - sell->total_trades;
 
         if (status == STOP)
@@ -164,6 +250,12 @@ class Spreader : public VNode
                 max_buy = 0;
                 max_sell = 0;
             }
+        }
+
+        if (si->is_ready)
+        {
+            std::cout << "[spreader] si.bid / si.ask = " << si->bid << " " << si->ask << "  status = " << status << std::endl;
+            //getchar();
         }
 
         if (si->is_ready && si->bid < si->ask)
@@ -209,6 +301,11 @@ class Spreader : public VNode
         //return sid_ref;
     }
 
+    MktDataL1 &sid(std::string symbol)
+    {
+        return storage->RegisterL1(symbol);
+    }
+
     void sid(int type, std::string str_id)
     {
     }
@@ -250,12 +347,17 @@ struct RootNode : public VNode
     void Initialization()
     {
         Spreader *spreader = new Spreader(*storage, *out);
-        Spreader *spreader2 = new Spreader(*storage, *out);
+        //SpreaderSber *spreader2 = new SpreaderSber(*storage, *out);
+        Spreader *spreader2 = new Spreader("SBRF-12.16", *storage, *out);
+        Spreader *spreader3 = new Spreader("RTS-12.16", *storage, *out);
 
-        spreader->SetProperty("spread", "6");
+        spreader->SetProperty("spread", "3");
+        spreader2->SetProperty("spread", "6");
+        spreader3->SetProperty("spread", "40");
 
         Mount(*spreader);
-        //Mount(*spreader2);
+        Mount(*spreader2);
+        Mount(*spreader3);
     }
 
     void Mount(VNode &node)
@@ -380,6 +482,9 @@ struct ScriptBroker : public BasePipe
         root = new RootNode(storage, orders);
         root->RequestSettings();
         ext_id = 1000;
+
+        //
+        storage.RequestInstrumentInfo(out);
     }
 
     int64_t GenereateExtId()
@@ -537,6 +642,7 @@ struct ScriptBroker : public BasePipe
                 {
                     //idea about reserved ext_id
                     //global info (usually for storage)
+                    storage.ReplyInstrumentInfo(info_reply);
                 }
             }
             else
@@ -545,11 +651,11 @@ struct ScriptBroker : public BasePipe
                 throw "Unknown msg_type";
             }
         }
-        std::cout << "[broker] !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! status = " << in.rdstate() << std::endl;
-        std::cout << "[broker] !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! isbad = " << in.bad() << std::endl;
-        std::cout << "[broker] !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! iseof = " << in.eof() << std::endl;
-        std::cout << "[broker] !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! isfail = " << in.fail() << std::endl;
-        getchar();
+        //std::cout << "[broker] !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! status = " << in.rdstate() << std::endl;
+        //std::cout << "[broker] !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! isbad = " << in.bad() << std::endl;
+        //std::cout << "[broker] !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! iseof = " << in.eof() << std::endl;
+        //std::cout << "[broker] !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! isfail = " << in.fail() << std::endl;
+        //getchar();
 
         //in->seekg(0, std::ios::beg);
         //in->seekp(0, std::ios::beg);
@@ -588,7 +694,7 @@ struct ScriptBroker : public BasePipe
     BasePipe &operator|(std::stringstream &stream)
     {
         Do();
-        std::cout << "[script-broket] data from storage " << storage.l1[1].bid << " " << storage.l1[1].ask << " " << &storage << std::endl;
+        //std::cout << "[script-broket] data from storage " << storage.l1[1].bid << " " << storage.l1[1].ask << " " << &storage << std::endl;
         if (out.tellp() > out.tellg())
         {
             stream << out.rdbuf();

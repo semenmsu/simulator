@@ -347,12 +347,12 @@ struct RootNode : public VNode
     void Initialization()
     {
         Spreader *spreader = new Spreader("Si-12.16", *storage, *out);
-        Spreader *spreader2 = new Spreader("RTS-12.16", *storage, *out);
+        //Spreader *spreader2 = new Spreader("RTS-12.16", *storage, *out);
         //SpreaderSber *spreader2 = new SpreaderSber(*storage, *out);
         //Spreader *spreader2 = new Spreader("SBRF-12.16", *storage, *out);
         //Spreader *spreader3 = new Spreader("RTS-12.16", *storage, *out);
 
-        spreader->SetProperty("spread", "15");
+        spreader->SetProperty("spread", "5");
         //spreader2->SetProperty("spread", "50");
         //spreader2->SetProperty("spread", "15");
         //spreader3->SetProperty("spread", "100");

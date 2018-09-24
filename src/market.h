@@ -70,6 +70,7 @@ class Market : BasePipe
 
     Market(std::string order_book)
     {
+        out = new std::stringstream();
         this->operator<<(order_book);
     }
     void PlaceOrder(T &order);

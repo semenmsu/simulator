@@ -21,6 +21,7 @@ TEST(MatchingTest, AddBuyMakerOrder)
         8 1 1 2 
         7 1 1 3 2
         )");
+
     mkt << "6 1 1 41";
     Market<Order> mkt_expect(R"(
         12 1 2 31
@@ -166,15 +167,17 @@ TEST(User, AddOrderReceiveNewReply)
         7 1 1 3 2 101
         )");
 
+    //mkt.out = new std::stringstream();
+
     int msg_type;
-    mkt.out.read((char *)&msg_type, sizeof(msg_type));
+    mkt.out->read((char *)&msg_type, sizeof(msg_type));
     EXPECT_EQ(msg_type, NEW_REPLY_MSG);
 
     NewReply newReply;
-    mkt.out.read((char *)&newReply, sizeof(newReply));
+    mkt.out->read((char *)&newReply, sizeof(newReply));
     EXPECT_EQ(newReply.ext_id, 101);
-    EXPECT_EQ(mkt.out.tellp(), sizeof(newReply) + sizeof(msg_type));
-    EXPECT_EQ(mkt.out.tellg(), mkt.out.tellp());
+    EXPECT_EQ(mkt.out->tellp(), sizeof(newReply) + sizeof(msg_type));
+    EXPECT_EQ(mkt.out->tellg(), mkt.out->tellp());
 }
 
 TEST(User, AddBuyTakerReceiveNewReplyAndOneTrade)
@@ -192,26 +195,26 @@ TEST(User, AddBuyTakerReceiveNewReplyAndOneTrade)
 
     //new order
     int msg_type;
-    mkt.out.read((char *)&msg_type, sizeof(msg_type));
+    mkt.out->read((char *)&msg_type, sizeof(msg_type));
     EXPECT_EQ(msg_type, NEW_REPLY_MSG);
 
     NewReply newReply;
-    mkt.out.read((char *)&newReply, sizeof(newReply));
+    mkt.out->read((char *)&newReply, sizeof(newReply));
     EXPECT_EQ(newReply.ext_id, 101);
     EXPECT_EQ(newReply.code, 0);
 
     //trade
-    mkt.out.read((char *)&msg_type, sizeof(msg_type));
+    mkt.out->read((char *)&msg_type, sizeof(msg_type));
     EXPECT_EQ(msg_type, TRADE_MSG);
 
     Trade newTrade;
-    mkt.out.read((char *)&newTrade, sizeof(newTrade));
+    mkt.out->read((char *)&newTrade, sizeof(newTrade));
     EXPECT_EQ(newTrade.amount, 1);
     EXPECT_EQ(newTrade.user_code, 77);
     EXPECT_EQ(newTrade.deal_price, 10);
 
     //end
-    EXPECT_EQ(mkt.out.tellg(), mkt.out.tellp());
+    EXPECT_EQ(mkt.out->tellg(), mkt.out->tellp());
 }
 
 TEST(User, AddBuyTakerReceiveNewReplyAndTwoTrades)
@@ -230,36 +233,36 @@ TEST(User, AddBuyTakerReceiveNewReplyAndTwoTrades)
 
     //new order
     int msg_type;
-    mkt.out.read((char *)&msg_type, sizeof(msg_type));
+    mkt.out->read((char *)&msg_type, sizeof(msg_type));
     EXPECT_EQ(msg_type, NEW_REPLY_MSG);
 
     NewReply newReply;
-    mkt.out.read((char *)&newReply, sizeof(newReply));
+    mkt.out->read((char *)&newReply, sizeof(newReply));
     EXPECT_EQ(newReply.ext_id, 101);
     EXPECT_EQ(newReply.code, 0);
 
     //trade
-    mkt.out.read((char *)&msg_type, sizeof(msg_type));
+    mkt.out->read((char *)&msg_type, sizeof(msg_type));
     EXPECT_EQ(msg_type, TRADE_MSG);
 
     Trade newTrade;
-    mkt.out.read((char *)&newTrade, sizeof(newTrade));
+    mkt.out->read((char *)&newTrade, sizeof(newTrade));
     EXPECT_EQ(newTrade.amount, 1);
     EXPECT_EQ(newTrade.user_code, 77);
     EXPECT_EQ(newTrade.deal_price, 10);
 
     //trade
-    mkt.out.read((char *)&msg_type, sizeof(msg_type));
+    mkt.out->read((char *)&msg_type, sizeof(msg_type));
     EXPECT_EQ(msg_type, TRADE_MSG);
 
     Trade newTrade2;
-    mkt.out.read((char *)&newTrade2, sizeof(newTrade2));
+    mkt.out->read((char *)&newTrade2, sizeof(newTrade2));
     EXPECT_EQ(newTrade2.amount, 1);
     EXPECT_EQ(newTrade2.user_code, 77);
     EXPECT_EQ(newTrade2.deal_price, 11);
 
     //end
-    EXPECT_EQ(mkt.out.tellg(), mkt.out.tellp());
+    EXPECT_EQ(mkt.out->tellg(), mkt.out->tellp());
 }
 
 TEST(User, AddBuyTakerCrossOrderFailure)
@@ -275,21 +278,21 @@ TEST(User, AddBuyTakerCrossOrderFailure)
         )");
 
     //need reset out
-    mkt.out.seekg(0, std::ios::beg);
-    mkt.out.seekp(0, std::ios::beg);
+    mkt.out->seekg(0, std::ios::beg);
+    mkt.out->seekp(0, std::ios::beg);
     mkt << "10 1 1 555 77 101";
 
     int msg_type;
-    mkt.out.read((char *)&msg_type, sizeof(msg_type));
+    mkt.out->read((char *)&msg_type, sizeof(msg_type));
     EXPECT_EQ(msg_type, NEW_REPLY_MSG);
 
     NewReply newReply;
-    mkt.out.read((char *)&newReply, sizeof(newReply));
+    mkt.out->read((char *)&newReply, sizeof(newReply));
     EXPECT_EQ(newReply.orderid, 555); //doesn't work for user
     EXPECT_EQ(newReply.ext_id, 101);
     EXPECT_EQ(newReply.code, CROSS_ORDER_ERR);
-    EXPECT_EQ(mkt.out.tellp(), sizeof(newReply) + sizeof(msg_type));
-    EXPECT_EQ(mkt.out.tellg(), mkt.out.tellp());
+    EXPECT_EQ(mkt.out->tellp(), sizeof(newReply) + sizeof(msg_type));
+    EXPECT_EQ(mkt.out->tellg(), mkt.out->tellp());
 }
 
 TEST(User, CancelBuyOrder)
@@ -305,8 +308,8 @@ TEST(User, CancelBuyOrder)
         )");
 
     //reset out
-    mkt.out.seekg(0, std::ios::beg);
-    mkt.out.seekp(0, std::ios::beg);
+    mkt.out->seekg(0, std::ios::beg);
+    mkt.out->seekp(0, std::ios::beg);
 
     mkt << "-3 77";
 
@@ -319,16 +322,16 @@ TEST(User, CancelBuyOrder)
         8 1 1 2 
         )");
 
-    EXPECT_EQ(mkt.out.tellp(), sizeof(CancelReply) + sizeof(int));
+    EXPECT_EQ(mkt.out->tellp(), sizeof(CancelReply) + sizeof(int));
     int msg_type;
-    mkt.out.read((char *)&msg_type, sizeof(msg_type));
+    mkt.out->read((char *)&msg_type, sizeof(msg_type));
     EXPECT_EQ(msg_type, CANCEL_REPLY_MSG);
 
     CancelReply cancel_reply;
-    mkt.out.read((char *)&cancel_reply, sizeof(cancel_reply));
+    mkt.out->read((char *)&cancel_reply, sizeof(cancel_reply));
     EXPECT_EQ(cancel_reply.orderid, 3);
     EXPECT_EQ(cancel_reply.code, 0);
-    EXPECT_EQ(mkt.out.tellg(), mkt.out.tellp());
+    EXPECT_EQ(mkt.out->tellg(), mkt.out->tellp());
 }
 
 TEST(User, CancelBuyNonExistentOrder)
@@ -344,8 +347,8 @@ TEST(User, CancelBuyNonExistentOrder)
         )");
 
     //reset out
-    mkt.out.seekg(0, std::ios::beg);
-    mkt.out.seekp(0, std::ios::beg);
+    mkt.out->seekg(0, std::ios::beg);
+    mkt.out->seekp(0, std::ios::beg);
 
     mkt << "-4 77";
 
@@ -359,16 +362,16 @@ TEST(User, CancelBuyNonExistentOrder)
         7 1 1 3 77
         )");
 
-    EXPECT_EQ(mkt.out.tellp(), sizeof(CancelReply) + sizeof(int));
+    EXPECT_EQ(mkt.out->tellp(), sizeof(CancelReply) + sizeof(int));
     int msg_type;
-    mkt.out.read((char *)&msg_type, sizeof(msg_type));
+    mkt.out->read((char *)&msg_type, sizeof(msg_type));
     EXPECT_EQ(msg_type, CANCEL_REPLY_MSG);
 
     CancelReply cancel_reply;
-    mkt.out.read((char *)&cancel_reply, sizeof(cancel_reply));
+    mkt.out->read((char *)&cancel_reply, sizeof(cancel_reply));
     EXPECT_EQ(cancel_reply.orderid, 4);
     EXPECT_EQ(cancel_reply.code, ORDER_NOT_FOUND);
-    EXPECT_EQ(mkt.out.tellg(), mkt.out.tellp());
+    EXPECT_EQ(mkt.out->tellg(), mkt.out->tellp());
 }
 
 //user SELL order
@@ -385,14 +388,14 @@ TEST(User, AddSellOrderReceiveNewReply)
         )");
 
     int msg_type;
-    mkt.out.read((char *)&msg_type, sizeof(msg_type));
+    mkt.out->read((char *)&msg_type, sizeof(msg_type));
     EXPECT_EQ(msg_type, NEW_REPLY_MSG);
 
     NewReply newReply;
-    mkt.out.read((char *)&newReply, sizeof(newReply));
+    mkt.out->read((char *)&newReply, sizeof(newReply));
     EXPECT_EQ(newReply.ext_id, 101);
-    EXPECT_EQ(mkt.out.tellp(), sizeof(newReply) + sizeof(msg_type));
-    EXPECT_EQ(mkt.out.tellg(), mkt.out.tellp());
+    EXPECT_EQ(mkt.out->tellp(), sizeof(newReply) + sizeof(msg_type));
+    EXPECT_EQ(mkt.out->tellg(), mkt.out->tellp());
 }
 
 TEST(User, AddSellTakerReceiveNewReplyAndOneTrade)
@@ -410,26 +413,26 @@ TEST(User, AddSellTakerReceiveNewReplyAndOneTrade)
 
     //new order
     int msg_type;
-    mkt.out.read((char *)&msg_type, sizeof(msg_type));
+    mkt.out->read((char *)&msg_type, sizeof(msg_type));
     EXPECT_EQ(msg_type, NEW_REPLY_MSG);
 
     NewReply newReply;
-    mkt.out.read((char *)&newReply, sizeof(newReply));
+    mkt.out->read((char *)&newReply, sizeof(newReply));
     EXPECT_EQ(newReply.ext_id, 101);
     EXPECT_EQ(newReply.code, 0);
 
     //trade
-    mkt.out.read((char *)&msg_type, sizeof(msg_type));
+    mkt.out->read((char *)&msg_type, sizeof(msg_type));
     EXPECT_EQ(msg_type, TRADE_MSG);
 
     Trade newTrade;
-    mkt.out.read((char *)&newTrade, sizeof(newTrade));
+    mkt.out->read((char *)&newTrade, sizeof(newTrade));
     EXPECT_EQ(newTrade.amount, 1);
     EXPECT_EQ(newTrade.user_code, 77);
     EXPECT_EQ(newTrade.deal_price, 9);
 
     //end
-    EXPECT_EQ(mkt.out.tellg(), mkt.out.tellp());
+    EXPECT_EQ(mkt.out->tellg(), mkt.out->tellp());
 }
 
 TEST(User, AddSellTakerReceiveNewReplyAndTwoTrades)
@@ -448,36 +451,36 @@ TEST(User, AddSellTakerReceiveNewReplyAndTwoTrades)
 
     //new order
     int msg_type;
-    mkt.out.read((char *)&msg_type, sizeof(msg_type));
+    mkt.out->read((char *)&msg_type, sizeof(msg_type));
     EXPECT_EQ(msg_type, NEW_REPLY_MSG);
 
     NewReply newReply;
-    mkt.out.read((char *)&newReply, sizeof(newReply));
+    mkt.out->read((char *)&newReply, sizeof(newReply));
     EXPECT_EQ(newReply.ext_id, 101);
     EXPECT_EQ(newReply.code, 0);
 
     //trade
-    mkt.out.read((char *)&msg_type, sizeof(msg_type));
+    mkt.out->read((char *)&msg_type, sizeof(msg_type));
     EXPECT_EQ(msg_type, TRADE_MSG);
 
     Trade newTrade;
-    mkt.out.read((char *)&newTrade, sizeof(newTrade));
+    mkt.out->read((char *)&newTrade, sizeof(newTrade));
     EXPECT_EQ(newTrade.amount, 1);
     EXPECT_EQ(newTrade.user_code, 77);
     EXPECT_EQ(newTrade.deal_price, 9);
 
     //trade
-    mkt.out.read((char *)&msg_type, sizeof(msg_type));
+    mkt.out->read((char *)&msg_type, sizeof(msg_type));
     EXPECT_EQ(msg_type, TRADE_MSG);
 
     Trade newTrade2;
-    mkt.out.read((char *)&newTrade2, sizeof(newTrade2));
+    mkt.out->read((char *)&newTrade2, sizeof(newTrade2));
     EXPECT_EQ(newTrade2.amount, 1);
     EXPECT_EQ(newTrade2.user_code, 77);
     EXPECT_EQ(newTrade2.deal_price, 8);
 
     //end
-    EXPECT_EQ(mkt.out.tellg(), mkt.out.tellp());
+    EXPECT_EQ(mkt.out->tellg(), mkt.out->tellp());
 }
 
 TEST(User, AddSellTakerCrossOrderFailure)
@@ -493,21 +496,21 @@ TEST(User, AddSellTakerCrossOrderFailure)
         )");
 
     //need reset out
-    mkt.out.seekg(0, std::ios::beg);
-    mkt.out.seekp(0, std::ios::beg);
+    mkt.out->seekg(0, std::ios::beg);
+    mkt.out->seekp(0, std::ios::beg);
     mkt << "9 10 2 555 77 101";
 
     int msg_type;
-    mkt.out.read((char *)&msg_type, sizeof(msg_type));
+    mkt.out->read((char *)&msg_type, sizeof(msg_type));
     EXPECT_EQ(msg_type, NEW_REPLY_MSG);
 
     NewReply newReply;
-    mkt.out.read((char *)&newReply, sizeof(newReply));
+    mkt.out->read((char *)&newReply, sizeof(newReply));
     EXPECT_EQ(newReply.orderid, 555);
     EXPECT_EQ(newReply.ext_id, 101);
     EXPECT_EQ(newReply.code, CROSS_ORDER_ERR);
-    EXPECT_EQ(mkt.out.tellp(), sizeof(newReply) + sizeof(msg_type));
-    EXPECT_EQ(mkt.out.tellg(), mkt.out.tellp());
+    EXPECT_EQ(mkt.out->tellp(), sizeof(newReply) + sizeof(msg_type));
+    EXPECT_EQ(mkt.out->tellg(), mkt.out->tellp());
 }
 
 TEST(User, CancelSellOrder)
@@ -523,8 +526,8 @@ TEST(User, CancelSellOrder)
         )");
 
     //reset out
-    mkt.out.seekg(0, std::ios::beg);
-    mkt.out.seekp(0, std::ios::beg);
+    mkt.out->seekg(0, std::ios::beg);
+    mkt.out->seekp(0, std::ios::beg);
 
     mkt << "-11 77";
 
@@ -537,16 +540,16 @@ TEST(User, CancelSellOrder)
         7 1 1 3
         )");
 
-    EXPECT_EQ(mkt.out.tellp(), sizeof(CancelReply) + sizeof(int));
+    EXPECT_EQ(mkt.out->tellp(), sizeof(CancelReply) + sizeof(int));
     int msg_type;
-    mkt.out.read((char *)&msg_type, sizeof(msg_type));
+    mkt.out->read((char *)&msg_type, sizeof(msg_type));
     EXPECT_EQ(msg_type, CANCEL_REPLY_MSG);
 
     CancelReply cancel_reply;
-    mkt.out.read((char *)&cancel_reply, sizeof(cancel_reply));
+    mkt.out->read((char *)&cancel_reply, sizeof(cancel_reply));
     EXPECT_EQ(cancel_reply.orderid, 11);
     EXPECT_EQ(cancel_reply.code, 0);
-    EXPECT_EQ(mkt.out.tellg(), mkt.out.tellp());
+    EXPECT_EQ(mkt.out->tellg(), mkt.out->tellp());
 }
 
 TEST(User, CancelSellNonExistentOrder)
@@ -562,8 +565,8 @@ TEST(User, CancelSellNonExistentOrder)
         )");
 
     //reset out
-    mkt.out.seekg(0, std::ios::beg);
-    mkt.out.seekp(0, std::ios::beg);
+    mkt.out->seekg(0, std::ios::beg);
+    mkt.out->seekp(0, std::ios::beg);
 
     mkt << "-41 77";
 
@@ -577,16 +580,16 @@ TEST(User, CancelSellNonExistentOrder)
         7 1 1 3
         )");
 
-    EXPECT_EQ(mkt.out.tellp(), sizeof(CancelReply) + sizeof(int));
+    EXPECT_EQ(mkt.out->tellp(), sizeof(CancelReply) + sizeof(int));
     int msg_type;
-    mkt.out.read((char *)&msg_type, sizeof(msg_type));
+    mkt.out->read((char *)&msg_type, sizeof(msg_type));
     EXPECT_EQ(msg_type, CANCEL_REPLY_MSG);
 
     CancelReply cancel_reply;
-    mkt.out.read((char *)&cancel_reply, sizeof(cancel_reply));
+    mkt.out->read((char *)&cancel_reply, sizeof(cancel_reply));
     EXPECT_EQ(cancel_reply.orderid, 41);
     EXPECT_EQ(cancel_reply.code, ORDER_NOT_FOUND);
-    EXPECT_EQ(mkt.out.tellg(), mkt.out.tellp());
+    EXPECT_EQ(mkt.out->tellg(), mkt.out->tellp());
 }
 
 #endif // !__MATCHING_TEST__

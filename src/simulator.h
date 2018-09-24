@@ -227,11 +227,21 @@ class Simulator : public BasePipe
             int64_t _next_time = i.second->ReadOrderFile(current_time); //in C# 1tick = 100nano
             if (_next_time == 0)
             {
-                //std::cout << "_next_time == 0, this is impossible" << std::endl;
+                std::cout << "_next_time == 0, this is impossible" << std::endl;
+                //current_time += 1000000; //100ms
                 //getchar();
+                //time_t unix_time = (current_time - DELTA_TIME) / 10000000;
+
+                //char *dt = ctime(&unix_time);
+                //std::cout << "@@@@@@@@@@@@@@@@@@@@@@@@@TIME " << dt;
             }
             else
             {
+                //time_t unix_time = (current_time - DELTA_TIME) / 10000000;
+
+                //char *dt = ctime(&unix_time);
+                //std::cout << "@@@@@@@@@@@@@@@@@@@@@@@@@TIME " << dt;
+
                 if (current_time > stop_time)
                 {
                     time_t unix_time = (stop_time - DELTA_TIME) / 10000000;
@@ -262,15 +272,17 @@ class Simulator : public BasePipe
                     std::cout << "TIME " << dt;
                     getchar();
                 }
+
+                //std::cout << "next_time " << next_time << std::endl;
+                //std::cout << "current_time" << current_time << std::endl;
+                //current_time += 10000000; //sec
+                current_time += 1000000; //100ms
+                //current_time += 100000; //10ms
+                //current_time += 1000; //1ms
+                current_time = std::max(next_time, current_time);
             }
         }
-        //std::cout << "next_time " << next_time << std::endl;
-        //std::cout << "current_time" << current_time << std::endl;
-        //current_time += 10000000; //sec
-        //current_time += 1000000; //100ms
-        current_time += 100000; //10ms
-        //current_time += 1000; //1ms
-        current_time = std::max(next_time, current_time);
+        //std::cout << current_time << std::endl;
 
         //getchar();
     }

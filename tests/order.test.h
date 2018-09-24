@@ -45,7 +45,11 @@ TEST(ProcessOrder, UpdatePriceAmount)
 TEST(ProcessOrder, UpdatePriceSendNewOrder)
 {
     std::stringstream out;
-    ScriptOrder order(out);
+    //ScriptOrder order(out);
+    InstrumentInfoReply settings;
+    settings.min_step_price = 1;
+    settings.isin_id = 1;
+    ScriptOrder order("BTC", BUY, out, settings);
     order << "u 1000 1";
     order.Do();
 
@@ -71,7 +75,11 @@ TEST(ProcessOrder, UpdatePriceSendNewOrder)
 TEST(ProcessOrder, ReceiveNewReplyChangeStatusToNew)
 {
     std::stringstream out;
-    ScriptOrder order(out);
+    //ScriptOrder order(out);
+    InstrumentInfoReply settings;
+    settings.min_step_price = 1;
+    settings.isin_id = 1;
+    ScriptOrder order("BTC", BUY, out, settings);
     order << "u 1000 1";
     order.Do();
     order << "n 11 101 0";
@@ -82,7 +90,11 @@ TEST(ProcessOrder, ReceiveNewReplyChangeStatusToNew)
 TEST(ProcessOrder, UpdatePriceSendCancel)
 {
     std::stringstream out;
-    ScriptOrder order(out);
+    //ScriptOrder order(out);
+    InstrumentInfoReply settings;
+    settings.min_step_price = 1;
+    settings.isin_id = 1;
+    ScriptOrder order("BTC", BUY, out, settings);
     order << "u 1000 1";
     order.Do();
     order << "n 11 101 0";
@@ -111,7 +123,11 @@ TEST(ProcessOrder, UpdatePriceSendCancel)
 TEST(ProcessOrder, ReceiveCancelReplyChangeStatusToFree)
 {
     std::stringstream out;
-    ScriptOrder order(out);
+    //ScriptOrder order(out);
+    InstrumentInfoReply settings;
+    settings.min_step_price = 1;
+    settings.isin_id = 1;
+    ScriptOrder order("BTC", BUY, out, settings);
     order << "u 1000 1";
     order.Do();
     order << "n 11 101 0";
@@ -127,7 +143,11 @@ TEST(ProcessOrder, ReceiveCancelReplyChangeStatusToFree)
 TEST(ProcessOrder, ReceiveCancelReplyChangeStatusToCanceled)
 {
     std::stringstream out;
-    ScriptOrder order(out);
+    //ScriptOrder order(out);
+    InstrumentInfoReply settings;
+    settings.min_step_price = 1;
+    settings.isin_id = 1;
+    ScriptOrder order("BTC", BUY, out, settings);
     order << "u 1000 2";
     order.Do();
     order << "n 11 101 0";
@@ -144,7 +164,11 @@ TEST(ProcessOrder, ReceiveCancelReplyChangeStatusToCanceled)
 TEST(ProcessOrder, ReceiveOneTrade)
 {
     std::stringstream out;
-    ScriptOrder order(out);
+    //ScriptOrder order(out);
+    InstrumentInfoReply settings;
+    settings.min_step_price = 1;
+    settings.isin_id = 1;
+    ScriptOrder order("BTC", BUY, out, settings);
     order << "u 1000 10";
     order.Do();
     order << "n 11 101 0";
@@ -158,7 +182,11 @@ TEST(ProcessOrder, ReceiveOneTrade)
 TEST(ProcessOrder, ReceiveManyTrades)
 {
     std::stringstream out;
-    ScriptOrder order(out);
+    //ScriptOrder order(out);
+    InstrumentInfoReply settings;
+    settings.min_step_price = 1;
+    settings.isin_id = 1;
+    ScriptOrder order("BTC", BUY, out, settings);
     order << "u 1000 10";
     order.Do();
     order << "n 11 101 0";
@@ -174,7 +202,11 @@ TEST(ProcessOrder, ReceiveManyTrades)
 TEST(ProcessOrder, FilledOrder)
 {
     std::stringstream out;
-    ScriptOrder order(out);
+    // ScriptOrder order(out);
+    InstrumentInfoReply settings;
+    settings.min_step_price = 1;
+    settings.isin_id = 1;
+    ScriptOrder order("BTC", BUY, out, settings);
     order << "u 1000 10";
     order.Do();
     order << "n 11 101 0";
@@ -191,7 +223,11 @@ TEST(ProcessOrder, FilledOrder)
 TEST(ProcessOrder, CancelOrderComplete)
 {
     std::stringstream out;
-    ScriptOrder order(out);
+    //ScriptOrder order(out);
+    InstrumentInfoReply settings;
+    settings.min_step_price = 1;
+    settings.isin_id = 1;
+    ScriptOrder order("BTC", BUY, out, settings);
     order << "u 1000 10";
     order.Do();
     order << "n 11 101 0";
@@ -206,7 +242,11 @@ TEST(ProcessOrder, CancelOrderComplete)
 TEST(ProcessOrder, CancelOrderNotAllAmountResolved)
 {
     std::stringstream out;
-    ScriptOrder order(out);
+    //ScriptOrder order(out);
+    InstrumentInfoReply settings;
+    settings.min_step_price = 1;
+    settings.isin_id = 1;
+    ScriptOrder order("BTC", BUY, out, settings);
     order << "u 1000 10";
     order.Do();
     order << "n 11 101 0";
@@ -222,7 +262,11 @@ TEST(ProcessOrder, CancelOrderNotAllAmountResolved)
 TEST(ProcessOrder, AmountResolvedAfterCancelatiion)
 {
     std::stringstream out;
-    ScriptOrder order(out);
+    //ScriptOrder order(out);
+    InstrumentInfoReply settings;
+    settings.min_step_price = 1;
+    settings.isin_id = 1;
+    ScriptOrder order("BTC", BUY, out, settings);
     order << "u 1000 10";
     order.Do();
     order << "n 11 101 0";
@@ -235,4 +279,5 @@ TEST(ProcessOrder, AmountResolvedAfterCancelatiion)
     EXPECT_EQ(order.state.status, FREE);
     EXPECT_EQ(order.state.remainingAmount, 0);
 }
+
 #endif

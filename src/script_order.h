@@ -74,6 +74,18 @@ struct ScriptOrder
         this->out = &out;
     }
 
+    //for test
+    ScriptOrder(std::string symbol, int32_t dir, std::stringstream &out, InstrumentInfoReply reply)
+    {
+        this->symbol = symbol;
+        ref = this;
+        Free();
+        session_id = 0;
+        state.dir = dir;
+        this->out = &out;
+        ReplyInstrumentInfo(reply);
+    }
+
     void WriteMsgType(int msg_type)
     {
         out->write((char *)&msg_type, sizeof(msg_type));

@@ -6,6 +6,7 @@
 #include <string>
 #include <sstream>
 
+//from C#          621355968000000000
 #define DELTA_TIME 621355968000000000
 #define MKS 1000000
 #define TICK 10000000

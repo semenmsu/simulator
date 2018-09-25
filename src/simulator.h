@@ -137,7 +137,8 @@ class Simulator : public BasePipe
         //strptime(time_details, "%Y-%m", &tm);
         strptime(time_details, "%Y%m%d", &tm);
 
-        tm.tm_hour = 10;
+        //should actually use gmt time
+        tm.tm_hour = 7;
         tm.tm_min = 5;
         tm.tm_sec = 0;
 
@@ -146,16 +147,24 @@ class Simulator : public BasePipe
         tm_stop.tm_year = tm.tm_year;
         tm_stop.tm_mday = tm.tm_mday;
         tm_stop.tm_mon = tm.tm_mon;
-        tm_stop.tm_hour = 19;
+        tm_stop.tm_hour = 16;
         tm_stop.tm_min = 40;
         tm_stop.tm_sec = 0;
 
         time_t t = mktime(&tm);
         time_t t_stop = mktime(&tm_stop);
 
-        start_time = t * TICK + DELTA_TIME;
+        //GMT Greenwich Mean Time
+        time_t start_gmt = timegm(&tm);
+        time_t stop_gmt = timegm(&tm_stop);
+
+        std::cout << "Start time" << ctime(&start_gmt) << std::endl;
+        std::cout << "Stop  time" << ctime(&stop_gmt) << std::endl;
+        //getchar();
+
+        start_time = start_gmt * TICK + DELTA_TIME;
         current_time = start_time;
-        stop_time = t_stop * TICK + DELTA_TIME;
+        stop_time = stop_gmt * TICK + DELTA_TIME;
         printf("%ld \n", start_time);
         printf("%ld \n", stop_time);
         //getchar();

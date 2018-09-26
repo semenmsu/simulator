@@ -462,6 +462,8 @@ struct ScriptBroker : public BasePipe
         ScriptOrder *order;
         int64_t ext_id;
         int64_t external_ext_id;
+        int64_t ts_new;
+        int64_t ts_new_reply;
     };
 
     DataStorage storage;
@@ -515,6 +517,11 @@ struct ScriptBroker : public BasePipe
         }
     }
 
+    int64_t GetOrderDelay()
+    {
+        return 120 * 10;
+    }
+
     void ReadOrders()
     {
         int msg_type;
@@ -530,6 +537,7 @@ struct ScriptBroker : public BasePipe
                 NewOrder new_order;
                 orders.read((char *)&new_order, sizeof(new_order));
                 new_order.ext_id = new_ext_id;
+                new_order.ts = ts + GetOrderDelay();
                 //std::cout << "Start Create Session" << std::endl;
                 OrderSession *session = &order2session[pointer];
 
@@ -537,6 +545,7 @@ struct ScriptBroker : public BasePipe
                 //std::cout << "session" << std::endl;
                 session->external_ext_id = new_ext_id;
                 session->ext_id = new_order.ext_id;
+                session->ts_new = ts;
                 extid2session.insert(std::pair<int64_t, OrderSession *>(new_ext_id, session));
 
                 /*extid2session.insert(std::pair<int64_t, OrderSession>(new_ext_id, {.order = pointer,
@@ -556,6 +565,7 @@ struct ScriptBroker : public BasePipe
 
                 CancelOrder cancel_order;
                 orders.read((char *)&cancel_order, sizeof(cancel_order));
+                cancel_order.ts = ts + GetOrderDelay();
                 WriteMsgType(CANCEL_ORDER);
                 out.write((char *)&cancel_order, sizeof(cancel_order));
             }
@@ -603,6 +613,11 @@ struct ScriptBroker : public BasePipe
                 in.read((char *)&new_reply, sizeof(new_reply));
                 OrderSession *session = extid2session[new_reply.ext_id];
                 new_reply.ext_id = session->ext_id;
+                session->ts_new_reply = new_reply.ts;
+                //std::cout << "ts new       " << session->ts_new << std::endl;
+                //std::cout << "ts new reply " << session->ts_new_reply << std::endl;
+                //std::cout << "diff         " << (session->ts_new_reply - session->ts_new) / 10 << std::endl;
+                //getchar();
                 orderid2session.insert(std::pair<int64_t, OrderSession *>((int64_t)new_reply.orderid, session));
                 session->order->ReplyNew(new_reply);
             }

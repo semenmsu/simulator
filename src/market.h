@@ -42,6 +42,7 @@ class Market : BasePipe
     int64_t last_order_id;
     bool eof = false;
     int isin_id = 1;
+    int64_t next_time = 0;
     Market()
     {
         out = new std::stringstream();
@@ -158,9 +159,9 @@ class Market : BasePipe
 
     void ReadTimeStamp()
     {
-        int64_t ists;
-        in.read((char *)&ists, sizeof(ists));
-        //std::cout << "[market] read timestamp " << ists << std::endl;
+
+        in.read((char *)&ts, sizeof(ts));
+        //std::cout << "[market] read timestamp " << ts << std::endl;
         //std::cout << ":::::::::::::::::::::::timestamp " << ts << std::endl;
     }
 
@@ -181,6 +182,12 @@ class Market : BasePipe
     int64_t price;
     int32_t amount;
     int32_t dir;*/
+        //????
+        if (ts < new_order.ts)
+        {
+            ts = new_order.ts;
+        }
+
         t.action = 1;
         t.dir = (int)new_order.dir;
         t.orderid = 0;
@@ -188,6 +195,7 @@ class Market : BasePipe
         t.amount = new_order.amount;
         t.ext_id = new_order.ext_id;
         t.user_code = new_order.user_code;
+        //std::cout << "[market   ]--> new " << ts << std::endl;
         //std::cout << "[script] READ NEW ORDER ext_id " << t.ext_id << std::endl;
         //std::cout << "[script] " << new_order;
         PlaceOrder(t);
@@ -206,6 +214,10 @@ class Market : BasePipe
 
     void ReadCancelOrder(CancelOrder &cancel_order)
     {
+        if (ts < cancel_order.ts)
+        {
+            ts = cancel_order.ts;
+        }
         T t;
         t.action = 0;
         t.orderid = cancel_order.orderid;
@@ -276,14 +288,6 @@ class Market : BasePipe
                 break;
             }
 
-            //char *dt = ctime(&t);
-
-            //std::cout << "order.ts = " << order.ts << std::endl;
-            //order.ts -= DELTA_TIME;
-            //std::cout << "C# -> unix " << order.ts << std::endl;
-            //time_t unix_time = order.ts / 10000000;
-            //char *dt = ctime(&unix_time);
-            //std::cout << "converted time " << dt << std::endl;
             getchar();
             PlaceOrder(order);
         }
@@ -296,10 +300,11 @@ class Market : BasePipe
 
     int64_t ReadOrderFile(int64_t time_boundary)
     {
+        ts = time_boundary;
         int64_t moment = time_boundary;
 
         int64_t total_records = 0;
-        int64_t next_time = 0;
+        //int64_t next_time = 0;
         while (true)
         {
             T order;
@@ -315,18 +320,20 @@ class Market : BasePipe
             }
             next_time = res;
             total_records++;
-            //std::cout << order;
             PlaceOrder(order);
         }
-        //std::cout << "read_order until " << moment << " total records" << result << std::endl;
-        //getchar();
+
         if (total_records > 0)
         {
-            //std::cout << GetBid() << " | " << GetAsk() << std::endl;
             WriteMarketDataL1(GetBid(), GetAsk());
         }
-        //getchar();
+
         return next_time;
+    }
+
+    int64_t GetNextTimeStamp()
+    {
+        return reader->GetNextTimeStamp();
     }
 
     void WriteTimeStamp(std::stringstream &stream)
@@ -365,7 +372,7 @@ class Market : BasePipe
     friend Market &operator>>(int ts, Market &market)
     {
         std::cout << "update ts " << ts << std::endl;
-        market.ts = ts;
+        //market.ts = ts;
         return market;
     }
 
@@ -569,6 +576,7 @@ void Market<T>::PlaceOrder(T &order)
             {
                 //not found
                 struct CancelReply reply = {.ext_id = order.ext_id, .orderid = order.orderid, .code = ORDER_NOT_FOUND, .amount = 0};
+                reply.ts = ts;
                 int msg_type = CANCEL_REPLY_MSG;
                 out->write((char *)&msg_type, sizeof(msg_type));
                 out->write((char *)&reply, sizeof(reply));
@@ -577,6 +585,7 @@ void Market<T>::PlaceOrder(T &order)
             {
                 //found
                 struct CancelReply reply = {.ext_id = order.ext_id, .orderid = order.orderid, .code = 0, .amount = remaining_amount};
+                reply.ts = ts;
                 //std::cout << reply;
                 int msg_type = CANCEL_REPLY_MSG;
                 out->write((char *)&msg_type, sizeof(msg_type));
@@ -643,7 +652,8 @@ void Market<T>::PlaceOrder(T &order)
             if (status == 0)
             {
                 struct NewReply reply = {.ext_id = order.ext_id, .orderid = order.orderid, .code = 0};
-                //std::cout << "[market] SEND NEW_REPLY " << reply << std::endl;
+                reply.ts = ts;
+
                 int msg_type = NEW_REPLY_MSG;
                 out->write((char *)&msg_type, sizeof(msg_type));
                 out->write((char *)&reply, sizeof(reply));
@@ -651,6 +661,7 @@ void Market<T>::PlaceOrder(T &order)
             else if (status == 1)
             {
                 struct NewReply reply = {.ext_id = order.ext_id, .orderid = order.orderid, .code = CROSS_ORDER_ERR};
+                reply.ts = ts;
                 int msg_type = NEW_REPLY_MSG;
                 out->write((char *)&msg_type, sizeof(msg_type));
                 out->write((char *)&reply, sizeof(reply));
@@ -663,11 +674,13 @@ void Market<T>::PlaceOrder(T &order)
             if (i.first.user_code > 0 && i.first.user_code < 1000)
             {
                 int msg_type = TRADE_MSG;
+                i.first.ts = ts;
                 out->write((char *)&msg_type, sizeof(msg_type));
                 out->write((char *)&i.first, sizeof(i.first));
             }
             if (i.second.user_code > 0 && i.second.user_code < 1000)
             {
+                i.second.ts = ts;
                 int msg_type = TRADE_MSG;
                 out->write((char *)&msg_type, sizeof(msg_type));
                 out->write((char *)&i.second, sizeof(i.second));
@@ -733,6 +746,7 @@ void Market<T>::PlaceOrder(T &order)
             if (status == 0)
             {
                 struct NewReply reply = {.ext_id = order.ext_id, .orderid = order.orderid, .code = 0};
+                reply.ts = ts;
                 int msg_type = NEW_REPLY_MSG;
                 out->write((char *)&msg_type, sizeof(msg_type));
                 out->write((char *)&reply, sizeof(reply));
@@ -740,6 +754,7 @@ void Market<T>::PlaceOrder(T &order)
             else if (status == 1)
             {
                 struct NewReply reply = {.ext_id = order.ext_id, .orderid = order.orderid, .code = CROSS_ORDER_ERR};
+                reply.ts = ts;
                 int msg_type = NEW_REPLY_MSG;
                 out->write((char *)&msg_type, sizeof(msg_type));
                 out->write((char *)&reply, sizeof(reply));
@@ -752,11 +767,13 @@ void Market<T>::PlaceOrder(T &order)
             if (i.first.user_code > 0 && i.first.user_code < 1000)
             {
                 int msg_type = TRADE_MSG;
+                i.first.ts = ts;
                 out->write((char *)&msg_type, sizeof(msg_type));
                 out->write((char *)&i.first, sizeof(i.first));
             }
             if (i.second.user_code > 0 && i.second.user_code < 1000)
             {
+                i.second.ts = ts;
                 int msg_type = TRADE_MSG;
                 out->write((char *)&msg_type, sizeof(msg_type));
                 out->write((char *)&i.second, sizeof(i.second));

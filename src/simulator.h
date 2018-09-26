@@ -8,6 +8,7 @@
 //include <time.h>
 #include <ctime>
 #include <sstream>
+#include <queue>
 
 #include "../include/json.hpp"
 #include "market.h"
@@ -81,6 +82,8 @@ class Simulator : public BasePipe
     std::string date = "";
     std::stringstream in;
     std::stringstream out;
+    std::queue<NewOrder> new_orders;
+    std::queue<CancelOrder> cancel_orders;
     int32_t eof = 0;
 
     Simulator() {}
@@ -233,67 +236,52 @@ class Simulator : public BasePipe
         for (auto i : markets)
         {
             //i.second->ReadOrderFile();
-            int64_t _next_time = i.second->ReadOrderFile(current_time); //in C# 1tick = 100nano
-            if (_next_time == 0)
+            //int64_t _next_time = i.second->ReadOrderFile(current_time); //in C# 1tick = 100nano
+            i.second->ReadOrderFile(current_time);
+            if (next_time == 0)
             {
-                std::cout << "_next_time == 0, this is impossible" << std::endl;
-                //current_time += 1000000; //100ms
-                //getchar();
-                //time_t unix_time = (current_time - DELTA_TIME) / 10000000;
-
-                //char *dt = ctime(&unix_time);
-                //std::cout << "@@@@@@@@@@@@@@@@@@@@@@@@@TIME " << dt;
+                next_time = i.second->GetNextTimeStamp();
             }
-            else
+            else if (next_time > i.second->GetNextTimeStamp())
             {
-                //time_t unix_time = (current_time - DELTA_TIME) / 10000000;
+                next_time = i.second->GetNextTimeStamp();
+            }
 
-                //char *dt = ctime(&unix_time);
-                //std::cout << "@@@@@@@@@@@@@@@@@@@@@@@@@TIME " << dt;
+            if (next_time == 0)
+            {
+                std::cout << "next_time == 0, it is impossible????" << std::endl;
+                getchar();
+            }
+            if (current_time > stop_time)
+            {
+                time_t unix_time = (stop_time - DELTA_TIME) / 10000000;
 
-                if (current_time > stop_time)
-                {
-                    time_t unix_time = (stop_time - DELTA_TIME) / 10000000;
-
-                    char *dt = ctime(&unix_time);
-                    std::cout << "@@@@@@@@@@@@@@@@@@@@@@@@@TIME " << dt;
-                    std::cout << "current " << current_time << std::endl;
-                    std::cout << "stop" << stop_time << std::endl;
-                    eof = 1;
-                    return;
-                }
-                if (next_time == 0)
-                {
-                    next_time = _next_time;
-                }
-                else if (next_time > _next_time)
-                {
-                    next_time = _next_time;
-                }
-                if (next_time <= current_time)
-                {
-                    std::cout << "next_time <= current_time, this is wrong" << std::endl;
-                    std::cout << "next_time " << next_time << std::endl;
-                    std::cout << "current_time" << current_time << std::endl;
-                    time_t unix_time = (current_time - DELTA_TIME) / 10000000;
-
-                    char *dt = ctime(&unix_time);
-                    std::cout << "TIME " << dt;
-                    getchar();
-                }
-
-                //std::cout << "next_time " << next_time << std::endl;
-                //std::cout << "current_time" << current_time << std::endl;
-                //current_time += 10000000; //sec
-                current_time += 1000000; //100ms
-                //current_time += 100000; //10ms
-                //current_time += 1000; //1ms
-                current_time = std::max(next_time, current_time);
+                char *dt = ctime(&unix_time);
+                std::cout << "@@@@@@@@@@@@@@@@@@@@@@@@@TIME " << dt;
+                std::cout << "current " << current_time << std::endl;
+                std::cout << "stop" << stop_time << std::endl;
+                eof = 1;
+                return;
             }
         }
-        //std::cout << current_time << std::endl;
 
-        //getchar();
+        if (next_time > 0)
+        {
+            //std::cout << "next_time " << next_time << std::endl;
+            //std::cout << "current_time" << current_time << std::endl;
+            //current_time += 10000000; //sec
+            //current_time += 1000000; //100ms
+            //current_time += 100000; //10ms
+            //current_time += 10000; //1ms
+            //current_time += 1000; //100mks
+            //current_time += 100; //10mks
+            current_time = std::max(next_time, current_time);
+
+            /*time_t unix_time = (current_time - DELTA_TIME) / 10000000;
+
+            char *dt = ctime(&unix_time);
+            std::cout << "CURRENT " << dt;*/
+        }
     }
 
     int ReadMessageType()
@@ -340,7 +328,8 @@ class Simulator : public BasePipe
 
         NewOrder new_order;
         in.read((char *)&new_order, sizeof(new_order));
-        markets[new_order.isin_id]->ReadNewOrder(new_order);
+        //markets[new_order.isin_id]->ReadNewOrder(new_order);
+        new_orders.push(new_order);
     }
 
     void ReadCancelOrder()
@@ -348,7 +337,8 @@ class Simulator : public BasePipe
 
         CancelOrder cancel_order;
         in.read((char *)&cancel_order, sizeof(cancel_order));
-        markets[cancel_order.isin_id]->ReadCancelOrder(cancel_order);
+        //markets[cancel_order.isin_id]->ReadCancelOrder(cancel_order);
+        cancel_orders.push(cancel_order);
     }
 
     void ReadInputStream()
@@ -398,44 +388,73 @@ class Simulator : public BasePipe
     {
         int msg_type = TIMESTAMP_MSG;
         stream.write((char *)&msg_type, sizeof(msg_type));
-        stream.write((char *)&ts, sizeof(ts));
+        //stream.write((char *)&ts, sizeof(ts));
+        stream.write((char *)&current_time, sizeof(current_time));
+    }
+
+    void ReadOrderQueues()
+    {
+        int64_t next_orders_time = 0;
+        while (!new_orders.empty())
+        {
+            auto new_order = new_orders.front();
+            markets[new_order.isin_id]->ReadNewOrder(new_order);
+            if (new_order.ts > current_time)
+            {
+                next_orders_time = new_order.ts;
+                break;
+            }
+            //std::cout << "[simulator]--> new " << new_order.ts << std::endl;
+            //std::cout << "[simulator]--> ts  " << current_time << std::endl;
+            new_orders.pop();
+        }
+        while (!cancel_orders.empty())
+        {
+            auto cancel_order = cancel_orders.front();
+            markets[cancel_order.isin_id]->ReadCancelOrder(cancel_order);
+            if (cancel_order.ts > current_time)
+            {
+                next_orders_time = cancel_order.ts;
+                break;
+            }
+            cancel_orders.pop();
+        }
+
+        if (next_orders_time > 0 && next_orders_time < current_time)
+        {
+            current_time = next_orders_time;
+        }
     }
 
     BasePipe &operator|(BasePipe &to) override
     {
+        ReadInputStream();
+        ReadOrderQueues();
         WriteTimeStamp(to.In());
         ReadOrderFile();
-        ReadInputStream();
-        //ReadOrderFile();
+
+        //ReadOrderQueues();
+        //UpdateCurrentTime() //better update separatly
+
         if (out.tellp() > out.tellg())
         {
-            /*std::cout << "COPY  TO SCRIPT BROKER"
-                      << "out.tellg() = " << out.tellg()
-                      << "out.tellp() = " << out.tellp() << std::endl;*/
-            //std::cout << out.rdbuf() << std::endl;
             to.In() << out.rdbuf(); //copy
-            /*std::cout << "TO_IN TO SCRIPT BROKER"
-                      << "to.in.tellg() = " << to.In().tellg()
-                      << "to.in.tellp() = " << to.In().tellp() << std::endl;
-            std::cout << "AFTER TO SCRIPT BROKER"
-                      << "out.tellg() = " << out.tellg()
-                      << "out.tellp() = " << out.tellp() << std::endl;
-            //getchar();*/
         }
         return to;
     }
 
     BasePipe &operator|(std::stringstream &stream)
     {
+
         return *this;
     }
 
     //make matching
-    friend Simulator &operator>>(int ts, Simulator &market)
+    friend Simulator &operator>>(int ts, Simulator &sim)
     {
         //std::cout << "update ts " << ts << std::endl;
-        market.ts = ts;
-        return market;
+        //sim.ts = ts;
+        return sim;
     }
 
     std::stringstream &In() override

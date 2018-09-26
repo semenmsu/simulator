@@ -148,6 +148,7 @@ struct NewReply
     int64_t ext_id;
     int64_t orderid;
     int32_t code;
+    int64_t ts;
 
     NewReply &operator<<(std::string new_reply)
     {
@@ -179,6 +180,7 @@ struct CancelReply
     int64_t orderid;
     int32_t code;
     int32_t amount;
+    int64_t ts;
 
     CancelReply &operator<<(std::string cancel_reply)
     {
@@ -213,6 +215,7 @@ struct Trade
     int64_t deal_price;
     int32_t amount;
     int32_t user_code;
+    int64_t ts;
 
     Trade &operator<<(std::string trade)
     {

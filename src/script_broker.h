@@ -10,6 +10,7 @@
 #include <typeinfo>
 #include <utility>
 #include <vector>
+#include <fstream>
 #include <sstream>
 #include "iproto.h"
 #include "script_order.h"
@@ -44,8 +45,9 @@ struct DataStorage
         quote.ask = 0;
         quote.is_ready = 0;
         return quote;*/
-        MktDataL1 l1;
-        return l1;
+        //MktDataL1 l1;
+        //return l1;
+        return data;
     }
 
     MktDataL1 &RegisterL1(std::string symbol)
@@ -322,8 +324,10 @@ class Spreader : public VNode
         sell->Print();
         int32_t position = buy->total_trades - sell->total_trades;
         int64_t profit = buy->total_money + sell->total_money + position * (si->bid + si->ask) / 2;
+        int64_t total_trades = buy->total_trades + sell->total_trades;
         profit /= 1000000;
-        printf("@@@@@@@@@@@@@@@@@@@@@@@@@@@ Profit = %ld, position = %d @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n", profit, position);
+        printf("@@@@@@@@@@@@@@@@@@@@@@@@@@@ Profit = %ld, position = %d, total_trades = %ld @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n",
+               profit, position, total_trades);
     }
 };
 
@@ -352,8 +356,8 @@ struct RootNode : public VNode
         //Spreader *spreader2 = new Spreader("SBRF-12.16", *storage, *out);
         //Spreader *spreader3 = new Spreader("RTS-12.16", *storage, *out);
 
-        spreader->SetProperty("spread", "5");
-        //spreader2->SetProperty("spread", "50");
+        spreader->SetProperty("spread", "1");
+        //spreader2->SetProperty("spread", "10");
         //spreader2->SetProperty("spread", "15");
         //spreader3->SetProperty("spread", "100");
 
@@ -454,6 +458,10 @@ struct RootNode : public VNode
     }
 };
 
+struct VirtSocket
+{
+};
+
 struct ScriptBroker : public BasePipe
 {
 
@@ -481,6 +489,8 @@ struct ScriptBroker : public BasePipe
 
     Spreader *spreader;
     RootNode *root;
+    std::ofstream log;
+
     ScriptBroker()
     {
         //spreader = new Spreader(storage, orders);
@@ -488,8 +498,18 @@ struct ScriptBroker : public BasePipe
         root->RequestSettings();
         ext_id = 1000;
 
+        log.open("result/robo.csv");
+
         //
         storage.RequestInstrumentInfo(out);
+    }
+
+    void LogToFile(std::string line)
+    {
+        if (log.is_open())
+        {
+            log << line;
+        }
     }
 
     int64_t GenereateExtId()
@@ -551,7 +571,7 @@ struct ScriptBroker : public BasePipe
                 /*extid2session.insert(std::pair<int64_t, OrderSession>(new_ext_id, {.order = pointer,
                                                                                    .ext_id = new_order.ext_id,
                                                                                    .external_ext_id = new_ext_id}));*/
-
+                //LogToFile(new_order.to_csv());
                 WriteMsgType(NEW_ORDER);
                 out.write((char *)&new_order, sizeof(new_order));
             }
@@ -634,6 +654,7 @@ struct ScriptBroker : public BasePipe
                 Trade trade;
                 in.read((char *)&trade, sizeof(trade));
                 OrderSession *session = orderid2session[trade.orderid];
+                LogToFile(trade.to_csv());
                 session->order->ReplyTrade(trade);
             }
             else if (msg_type == TIMESTAMP_MSG)
@@ -682,7 +703,9 @@ struct ScriptBroker : public BasePipe
     void UpdateRoot()
     {
     }
+
     int64_t count = 0;
+
     void Do()
     {
         ReadInput();
@@ -730,6 +753,12 @@ struct ScriptBroker : public BasePipe
         //std::cout << "GET IN STREAM" << std::endl;
         return in;
     };
+
+    ~ScriptBroker()
+    {
+        log.close();
+        std::cout << "~ScriptBroker" << std::endl;
+    }
 };
 
 #endif

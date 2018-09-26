@@ -121,6 +121,14 @@ struct NewOrder
     int32_t amount;
     int32_t dir;
 
+    std::string to_csv()
+    {
+        std::ostringstream string_stream;
+        string_stream << "new_order," << ts << "," << isin_id << "," << ext_id << "," << price << "," << amount << ","
+                      << "," << dir << "\n";
+        return string_stream.str();
+    }
+
     friend std::ostream &operator<<(std::ostream &stream, NewOrder &new_order)
     {
         std::cout << FgGreen << "[NEW_ORDER] " << new_order.user_code << " " << new_order.ext_id << " " << new_order.price << " " << new_order.amount << Reset << std::endl;
@@ -211,11 +219,24 @@ struct CancelReply
 
 struct Trade
 {
+
     int64_t orderid;
     int64_t deal_price;
     int32_t amount;
     int32_t user_code;
     int64_t ts;
+    int32_t dir;
+    int32_t isin_id;
+
+    std::string to_csv()
+    {
+        //new_order,636131592311650000,758430,23457911778002,63680000000,1,,2,1
+        //new_order,636131592332230000,0,23457915845002,63698000000,1,,0,1
+        std::ostringstream string_stream;
+        string_stream << "trade," << ts << "," << isin_id << "," << orderid << "," << deal_price << "," << amount << ","
+                      << dir << "," << user_code << "\n";
+        return string_stream.str();
+    }
 
     Trade &operator<<(std::string trade)
     {
@@ -303,6 +324,17 @@ struct IdComparator
     {
         return left.orderid < right.orderid;
     };
+};
+
+struct SymbolSettings
+{
+    std::string symbol;
+    std::string date; //YYYYMMdd
+    std::string exchange;
+    std::string data_source;
+
+    std::string start_date;
+    std::string stop_date;
 };
 
 #endif

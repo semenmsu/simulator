@@ -11,9 +11,12 @@
 #include <utility>
 #include <vector>
 #include <sstream>
+#include <functional>
 #include "../include/reader.h"
 #include "iproto.h"
 #include "script.h"
+#include "../tests/testorder.h"
+#include "db_resolver.h"
 
 #define MAX_DEPTH 10
 
@@ -37,36 +40,72 @@ class Market : BasePipe
   public:
     std::stringstream *out;
     std::stringstream in;
-    Reader *reader;
+    Reader<FortsFutOrderBook> *reader;
     int64_t ts;
     int64_t last_order_id;
     bool eof = false;
     int isin_id = 1;
+    int64_t min_step_price = 1;
     int64_t next_time = 0;
+    std::function<int(T &, int64_t)> read_func;
+    std::function<int64_t(void)> get_next_time;
     Market()
     {
         out = new std::stringstream();
     };
 
-    Market(Reader &rdr)
+    Market(Reader<FortsFutOrderBook> &rdr)
     {
         reader = &rdr;
         out = new std::stringstream();
     }
 
-    Market(Reader *rdr)
+    Market(Reader<FortsFutOrderBook> *rdr)
     {
         reader = rdr;
         out = new std::stringstream();
     }
 
-    Market(Reader *rdr, std::stringstream *out_stream)
+    Market(Reader<FortsFutOrderBook> *rdr, std::stringstream *out_stream)
     {
         reader = rdr;
         out = out_stream;
         //std::cout << "############## Market constructor" << std::endl;
         isin_id = reader->Isin();
         //getchar();
+    }
+
+    void *super_reader;
+    //Reader<FortsFutOrderBook> *reader2;
+    Market(SymbolSettings &settings, std::stringstream *out_stream)
+    {
+        std::string path = DataPathResolver.ResolveDb(settings.symbol, settings.date);
+        std::string settings_path = DataPathResolver.ResolveSettings(settings.symbol, settings.date);
+        out = out_stream;
+
+        Reader<FortsFutOrderBook> *rdr = new Reader<FortsFutOrderBook>(settings.symbol, path, settings_path);
+        //reader2 = new Reader<FortsFutOrderBook>(settings.symbol, path, settings_path);
+
+        isin_id = rdr->Isin();
+        min_step_price = rdr->MinStep();
+        //std::cout << "isin_id " << isin_id << std::endl;
+
+        read_func = [=](T &t, int64_t moment) {
+            return rdr->Read(t, moment);
+        };
+        get_next_time = [=]() {
+            return rdr->GetNextTimeStamp();
+        };
+    }
+
+    int32_t Isin()
+    {
+        return isin_id;
+    }
+
+    int64_t MinStep()
+    {
+        return min_step_price;
     }
 
     Market(std::string order_book)
@@ -308,7 +347,11 @@ class Market : BasePipe
         while (true)
         {
             T order;
-            int64_t res = reader->Read(order, moment);
+            //int64_t res = reader->Read(order, moment);
+            //std::cout << "try read" << std::endl;
+            int64_t res = read_func(order, moment);
+            //std::cout << order << std::endl;
+            //std::cout << "stop read" << std::endl;
             if (res == -1)
             {
                 eof = true;
@@ -333,7 +376,8 @@ class Market : BasePipe
 
     int64_t GetNextTimeStamp()
     {
-        return reader->GetNextTimeStamp();
+        //return reader->GetNextTimeStamp();
+        return get_next_time();
     }
 
     void WriteTimeStamp(std::stringstream &stream)
@@ -675,12 +719,16 @@ void Market<T>::PlaceOrder(T &order)
             {
                 int msg_type = TRADE_MSG;
                 i.first.ts = ts;
+                i.first.isin_id = isin_id;
+                i.first.dir = 1;
                 out->write((char *)&msg_type, sizeof(msg_type));
                 out->write((char *)&i.first, sizeof(i.first));
             }
             if (i.second.user_code > 0 && i.second.user_code < 1000)
             {
                 i.second.ts = ts;
+                i.second.isin_id = isin_id;
+                i.second.dir = 2;
                 int msg_type = TRADE_MSG;
                 out->write((char *)&msg_type, sizeof(msg_type));
                 out->write((char *)&i.second, sizeof(i.second));
@@ -768,12 +816,16 @@ void Market<T>::PlaceOrder(T &order)
             {
                 int msg_type = TRADE_MSG;
                 i.first.ts = ts;
+                i.first.isin_id = isin_id;
+                i.first.dir = 2;
                 out->write((char *)&msg_type, sizeof(msg_type));
                 out->write((char *)&i.first, sizeof(i.first));
             }
             if (i.second.user_code > 0 && i.second.user_code < 1000)
             {
                 i.second.ts = ts;
+                i.second.isin_id = isin_id;
+                i.second.dir = 1;
                 int msg_type = TRADE_MSG;
                 out->write((char *)&msg_type, sizeof(msg_type));
                 out->write((char *)&i.second, sizeof(i.second));

@@ -14,63 +14,13 @@
 #include "market.h"
 #include "../tests/testorder.h"
 #include "../include/reader.h"
-
-struct SymbolSettings
-{
-    std::string symbol;
-    std::string date; //YYYYMMdd
-    std::string exchange;
-    std::string data_source;
-
-    std::string start_date;
-    std::string stop_date;
-};
-
-struct DataPathResolver
-{
-    static std::string ResolveExchange(std::string symbol)
-    {
-        if (symbol == "Si-16.12")
-        {
-            return "FORTS";
-        }
-
-        return "FORTS";
-    }
-    static std::string ResolveDb(std::string symbol, std::string date)
-    {
-        /*std::stringstream path;
-        std::string exchange = ResolveExchange(symbol);
-        path << "/home/soarix/Data";
-        path << "/" + exchange;
-        path << "/" + date;
-        std::string str = path.str();
-        //std::cout << str << std::endl;
-        return str;*/
-        std::string db_path = "/home/soarix/Data/FortsOrderBook.db";
-        return db_path;
-    }
-
-    static std::string ResolveSettings(std::string symbol, std::string date)
-    {
-        /*std::stringstream path;
-        std::string exchange = ResolveExchange(symbol);
-        path << "/home/soarix/Data";
-        path << "/" + exchange;
-        path << "/" + date;
-        std::string str = path.str();
-        //std::cout << str << std::endl;
-        return str;*/
-        std::string settings_path = "/home/soarix/Data/FortsOrderBookSettings.json";
-        return settings_path;
-    }
-} DataPathResolver;
+#include "db_resolver.h"
 
 //One day simulator
 class Simulator : public BasePipe
 {
 
-    std::unordered_map<int32_t, Reader *> readers;
+    std::unordered_map<int32_t, Reader<FortsFutOrderBook> *> readers;
     std::unordered_map<int32_t, Market<Order> *> markets;
     std::unordered_map<std::string, Market<Order> *> symbol2market;
 
@@ -102,21 +52,14 @@ class Simulator : public BasePipe
         std::string path = DataPathResolver.ResolveDb(settings.symbol, settings.date);
         std::string settings_path = DataPathResolver.ResolveSettings(settings.symbol, settings.date);
 
-        Reader *reader = new Reader(settings.symbol, path, settings_path);
+        Reader<FortsFutOrderBook> *reader = new Reader<FortsFutOrderBook>(settings.symbol, path, settings_path);
 
-        readers.insert(std::pair<int32_t, Reader *>(reader->Isin(), reader));
+        readers.insert(std::pair<int32_t, Reader<FortsFutOrderBook> *>(reader->Isin(), reader));
 
         //Reader reader(settings.symbol, path, settings_path);
         //Market<Order> *mkt = new Market<Order>(reader);
         Market<Order> *mkt = new Market<Order>(reader);
         markets.insert(std::pair<int32_t, Market<Order> *>(reader->Isin(), mkt));
-
-        //std::cout << path << std::endl;
-
-        //time_t t = mktime(&tm);
-        //char *dt = ctime(&t);
-        //printf("%d \n", t);
-        //printf("time = %s \n", dt);
     }
 
     void RequestAddSymbol(SymbolSettings &settings, InstrumentInfoReply &info_reply)
@@ -154,7 +97,7 @@ class Simulator : public BasePipe
         tm_stop.tm_min = 40;
         tm_stop.tm_sec = 0;
 
-        time_t t = mktime(&tm);
+        //time_t t = mktime(&tm);
         time_t t_stop = mktime(&tm_stop);
 
         //GMT Greenwich Mean Time
@@ -177,21 +120,24 @@ class Simulator : public BasePipe
 
         //std::cout << tm.tm_year + 1900 << " " << tm.tm_mon + 1 << " " << tm.tm_mday << std::endl;
 
-        std::string path = DataPathResolver.ResolveDb(settings.symbol, settings.date);
-        std::string settings_path = DataPathResolver.ResolveSettings(settings.symbol, settings.date);
+        //std::string path = DataPathResolver.ResolveDb(settings.symbol, settings.date);
+        //std::string settings_path = DataPathResolver.ResolveSettings(settings.symbol, settings.date);
 
         if (symbol2market.count(settings.symbol) == 0)
         {
-            Reader *reader = new Reader(settings.symbol, path, settings_path);
-            readers.insert(std::pair<int32_t, Reader *>(reader->Isin(), reader));
-            Market<Order> *mkt = new Market<Order>(reader, &out);
-            markets.insert(std::pair<int32_t, Market<Order> *>(reader->Isin(), mkt));
+            //Reader<FortsFutOrderBook> *reader = new Reader<FortsFutOrderBook>(settings.symbol, path, settings_path);
+            //readers.insert(std::pair<int32_t, Reader<FortsFutOrderBook> *>(reader->Isin(), reader));
+            //Market<Order> *mkt = new Market<Order>(reader, &out);
+            Market<Order> *mkt = new Market<Order>(settings, &out);
+            markets.insert(std::pair<int32_t, Market<Order> *>(mkt->Isin(), mkt));
+            //markets.insert(std::pair<int32_t, Market<Order> *>(reader->Isin(), mkt));
             symbol2market.insert(std::pair<std::string, Market<Order> *>(settings.symbol, mkt));
         }
+
         //std::cout << "min_step: " << symbol2market[settings.symbol]->reader->MinStep() << std::endl;
         //std::cout << "isin_id: " << symbol2market[settings.symbol]->reader->Isin() << std::endl;
-        info_reply.isin_id = symbol2market[settings.symbol]->reader->Isin();
-        info_reply.min_step_price = symbol2market[settings.symbol]->reader->MinStep();
+        info_reply.isin_id = symbol2market[settings.symbol]->Isin();
+        info_reply.min_step_price = symbol2market[settings.symbol]->MinStep();
 
         //std::cout << path << std::endl;
     }
@@ -364,7 +310,7 @@ class Simulator : public BasePipe
                 //getchar();
                 break;
             case CANCEL_ORDER:
-                // std::cout << "[simulator] CANCEL_ORDER\n";
+                //std::cout << "[simulator] CANCEL_ORDER\n";
                 ReadCancelOrder();
                 break;
             case INSTRUMENT_INFO_REQUEST:

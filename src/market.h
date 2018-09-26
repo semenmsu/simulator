@@ -22,7 +22,6 @@
 
 #define USER_CODE
 
-template <typename T>
 struct BaseMarket
 {
     virtual int32_t Isin() = 0;
@@ -34,7 +33,7 @@ struct BaseMarket
 };
 
 template <typename T>
-class Market : BasePipe, public BaseMarket<T>
+class Market : BasePipe, public BaseMarket
 {
     typedef typename std::set<T, IdComparator<T>> OrderSet;
     typedef typename std::set<T, GreaterComparator<T>> BuySet;

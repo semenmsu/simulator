@@ -9,6 +9,7 @@
 #include <ctime>
 #include <sstream>
 #include <queue>
+#include <memory>
 
 #include "../include/json.hpp"
 #include "market.h"
@@ -22,8 +23,9 @@ class Simulator : public BasePipe
 
     std::unordered_map<int32_t, Reader<FortsFutOrderBook> *> readers;
     std::unordered_map<int32_t, Market<Order> *> markets;
-    std::unordered_map<int32_t, BaseMarket<Order> *> vm;
-    std::unordered_map<std::string, BaseMarket<Order> *> svm; //symbol virtual market
+    std::unordered_map<int32_t, BaseMarket *> vm;
+    //std::vector<std::shared_ptr<BaseMarket<Order>>> As;
+    std::unordered_map<std::string, BaseMarket *> svm; //symbol virtual market
     std::unordered_map<std::string, Market<Order> *> symbol2market;
 
   public:

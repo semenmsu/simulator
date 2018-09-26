@@ -23,7 +23,18 @@
 #define USER_CODE
 
 template <typename T>
-class Market : BasePipe
+struct BaseMarket
+{
+    virtual int32_t Isin() = 0;
+    virtual int64_t MinStep() = 0;
+    virtual int64_t ReadOrderFile(int64_t time_boundary) = 0;
+    virtual int64_t GetNextTimeStamp() = 0;
+    virtual void ReadNewOrder(NewOrder &new_order) = 0;
+    virtual void ReadCancelOrder(CancelOrder &cancel_order) = 0;
+};
+
+template <typename T>
+class Market : BasePipe, public BaseMarket<T>
 {
     typedef typename std::set<T, IdComparator<T>> OrderSet;
     typedef typename std::set<T, GreaterComparator<T>> BuySet;
@@ -79,23 +90,28 @@ class Market : BasePipe
     //Reader<FortsFutOrderBook> *reader2;
     Market(SymbolSettings &settings, std::stringstream *out_stream)
     {
+        std::string exchange = DataPathResolver.ResolveExchange(settings.symbol);
         std::string path = DataPathResolver.ResolveDb(settings.symbol, settings.date);
         std::string settings_path = DataPathResolver.ResolveSettings(settings.symbol, settings.date);
         out = out_stream;
 
-        Reader<FortsFutOrderBook> *rdr = new Reader<FortsFutOrderBook>(settings.symbol, path, settings_path);
-        //reader2 = new Reader<FortsFutOrderBook>(settings.symbol, path, settings_path);
+        if (exchange == "FORTS")
+        {
+            Reader<FortsFutOrderBook> *rdr = new Reader<FortsFutOrderBook>(settings.symbol, path, settings_path);
+            isin_id = rdr->Isin();
+            min_step_price = rdr->MinStep();
 
-        isin_id = rdr->Isin();
-        min_step_price = rdr->MinStep();
-        //std::cout << "isin_id " << isin_id << std::endl;
-
-        read_func = [=](T &t, int64_t moment) {
-            return rdr->Read(t, moment);
-        };
-        get_next_time = [=]() {
-            return rdr->GetNextTimeStamp();
-        };
+            read_func = [=](T &t, int64_t moment) {
+                return rdr->Read(t, moment);
+            };
+            get_next_time = [=]() {
+                return rdr->GetNextTimeStamp();
+            };
+        }
+        else if (exchange == "MOEX_CURRENCY")
+        {
+            //... resolve
+        }
     }
 
     int32_t Isin()

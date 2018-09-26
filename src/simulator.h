@@ -22,6 +22,8 @@ class Simulator : public BasePipe
 
     std::unordered_map<int32_t, Reader<FortsFutOrderBook> *> readers;
     std::unordered_map<int32_t, Market<Order> *> markets;
+    std::unordered_map<int32_t, BaseMarket<Order> *> vm;
+    std::unordered_map<std::string, BaseMarket<Order> *> svm; //symbol virtual market
     std::unordered_map<std::string, Market<Order> *> symbol2market;
 
   public:
@@ -129,15 +131,22 @@ class Simulator : public BasePipe
             //readers.insert(std::pair<int32_t, Reader<FortsFutOrderBook> *>(reader->Isin(), reader));
             //Market<Order> *mkt = new Market<Order>(reader, &out);
             Market<Order> *mkt = new Market<Order>(settings, &out);
-            markets.insert(std::pair<int32_t, Market<Order> *>(mkt->Isin(), mkt));
+            //markets.insert(std::pair<int32_t, Market<Order> *>(mkt->Isin(), mkt));
+            vm.insert(std::pair<int32_t, Market<Order> *>(mkt->Isin(), mkt));
+            //BaseMarket<Order> *bmkt = mkt;
             //markets.insert(std::pair<int32_t, Market<Order> *>(reader->Isin(), mkt));
-            symbol2market.insert(std::pair<std::string, Market<Order> *>(settings.symbol, mkt));
+            //symbol2market.insert(std::pair<std::string, Market<Order> *>(settings.symbol, mkt));
+            svm.insert(std::pair<std::string, Market<Order> *>(settings.symbol, mkt));
         }
 
         //std::cout << "min_step: " << symbol2market[settings.symbol]->reader->MinStep() << std::endl;
         //std::cout << "isin_id: " << symbol2market[settings.symbol]->reader->Isin() << std::endl;
-        info_reply.isin_id = symbol2market[settings.symbol]->Isin();
-        info_reply.min_step_price = symbol2market[settings.symbol]->MinStep();
+
+        //info_reply.isin_id = symbol2market[settings.symbol]->Isin();
+        //info_reply.min_step_price = symbol2market[settings.symbol]->MinStep();
+
+        info_reply.isin_id = svm[settings.symbol]->Isin();
+        info_reply.min_step_price = svm[settings.symbol]->MinStep();
 
         //std::cout << path << std::endl;
     }
@@ -179,7 +188,8 @@ class Simulator : public BasePipe
         }*/
 
         int64_t next_time = 0;
-        for (auto i : markets)
+        //for (auto i : markets)
+        for (auto i : vm)
         {
             //i.second->ReadOrderFile();
             //int64_t _next_time = i.second->ReadOrderFile(current_time); //in C# 1tick = 100nano
@@ -344,7 +354,8 @@ class Simulator : public BasePipe
         while (!new_orders.empty())
         {
             auto new_order = new_orders.front();
-            markets[new_order.isin_id]->ReadNewOrder(new_order);
+            //markets[new_order.isin_id]->ReadNewOrder(new_order);
+            vm[new_order.isin_id]->ReadNewOrder(new_order);
             if (new_order.ts > current_time)
             {
                 next_orders_time = new_order.ts;
@@ -357,7 +368,8 @@ class Simulator : public BasePipe
         while (!cancel_orders.empty())
         {
             auto cancel_order = cancel_orders.front();
-            markets[cancel_order.isin_id]->ReadCancelOrder(cancel_order);
+            //markets[cancel_order.isin_id]->ReadCancelOrder(cancel_order);
+            vm[cancel_order.isin_id]->ReadCancelOrder(cancel_order);
             if (cancel_order.ts > current_time)
             {
                 next_orders_time = cancel_order.ts;

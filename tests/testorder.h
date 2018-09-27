@@ -28,6 +28,23 @@ struct FortsFutOrderBook
     }
 } __attribute__((packed, aligned(4)));
 
+struct MoexCurrOrderBook
+{
+    int64_t orderid;
+    int64_t moment;
+    int64_t price;
+    int32_t amount;
+    int32_t amount_rest;
+    char action;
+    char dir;
+    char __padding[2];
+    friend std::ostream &operator<<(std::ostream &stream, const MoexCurrOrderBook &order)
+    {
+        stream << order.price << " " << order.amount << " |" << (int)order.dir << " " << order.orderid << " action = " << (int)order.action << '\n';
+        return stream;
+    }
+} __attribute__((packed, aligned(4)));
+
 struct FortsOrder
 {
     int64_t orderid;
@@ -52,6 +69,7 @@ struct FortsOrder
         dir = source.dir;
         user_code = source.user_code;
     }
+
     friend std::ostream &operator<<(std::ostream &stream, const FortsOrder &order)
     {
         stream << order.price << " " << order.amount << " |" << (int)order.dir << " " << order.orderid << "  " << order.user_code << '\n';
@@ -93,6 +111,21 @@ struct Order
         dir = source.dir;
         user_code = source.user_code;
         ts = source.moment;
+    }
+
+    Order(const MoexCurrOrderBook &source)
+    {
+        orderid = source.orderid;
+        price = source.price;
+        amount = source.amount;
+        action = source.action;
+        dir = source.dir;
+        user_code = 0;
+        ts = source.moment;
+        if (price == 0)
+        {
+            action = 0;
+        }
     }
 
     Order &operator<<(std::string order)

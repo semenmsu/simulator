@@ -38,7 +38,7 @@
 
 #define MKT_DATA_L1 10001
 
-#define ORDERID_MULT 1000
+#define ORDERID_MULT 100000
 
 //send input to script and get answers + pass timestamps
 #define FREE 0
@@ -265,6 +265,7 @@ struct MktDataL1
     int64_t bid;
     int64_t ask;
     int32_t is_ready = 0;
+    int64_t min_step_price = 0;
     MktDataL1() : bid(0), ask(0), is_ready(0)
     {
     }

@@ -110,6 +110,15 @@ class Market : BasePipe, public BaseMarket
         else if (exchange == "MOEX_CURRENCY")
         {
             //... resolve
+            Reader<MoexCurrOrderBook> *rdr = new Reader<MoexCurrOrderBook>(settings.symbol, path, settings_path);
+            isin_id = rdr->Isin();
+            min_step_price = rdr->MinStep();
+            read_func = [=](T &t, int64_t moment) {
+                return rdr->Read(t, moment);
+            };
+            get_next_time = [=]() {
+                return rdr->GetNextTimeStamp();
+            };
         }
     }
 

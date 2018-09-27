@@ -149,7 +149,8 @@ class Simulator : public BasePipe
 
         info_reply.isin_id = svm[settings.symbol]->Isin();
         info_reply.min_step_price = svm[settings.symbol]->MinStep();
-
+        std::cout << "[simulator] isin_id = " << info_reply.isin_id << " min_step_price" << info_reply.min_step_price << std::endl;
+        //getchar();
         //std::cout << path << std::endl;
     }
 
@@ -193,6 +194,7 @@ class Simulator : public BasePipe
         //for (auto i : markets)
         for (auto i : vm)
         {
+
             //i.second->ReadOrderFile();
             //int64_t _next_time = i.second->ReadOrderFile(current_time); //in C# 1tick = 100nano
             i.second->ReadOrderFile(current_time);
@@ -357,12 +359,14 @@ class Simulator : public BasePipe
         {
             auto new_order = new_orders.front();
             //markets[new_order.isin_id]->ReadNewOrder(new_order);
-            vm[new_order.isin_id]->ReadNewOrder(new_order);
+
             if (new_order.ts > current_time)
             {
                 next_orders_time = new_order.ts;
                 break;
             }
+            vm[new_order.isin_id]->ReadNewOrder(new_order);
+
             //std::cout << "[simulator]--> new " << new_order.ts << std::endl;
             //std::cout << "[simulator]--> ts  " << current_time << std::endl;
             new_orders.pop();
@@ -371,12 +375,13 @@ class Simulator : public BasePipe
         {
             auto cancel_order = cancel_orders.front();
             //markets[cancel_order.isin_id]->ReadCancelOrder(cancel_order);
-            vm[cancel_order.isin_id]->ReadCancelOrder(cancel_order);
+
             if (cancel_order.ts > current_time)
             {
                 next_orders_time = cancel_order.ts;
                 break;
             }
+            vm[cancel_order.isin_id]->ReadCancelOrder(cancel_order);
             cancel_orders.pop();
         }
 

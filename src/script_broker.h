@@ -90,7 +90,9 @@ struct DataStorage
         {
             MktDataL1 bidask;
             bidask.isin_id = info_reply.isin_id;
+
             symbol2BestBidAsk[symbol] = bidask;
+            bidask.min_step_price = info_reply.min_step_price;
 
             if (l1.count(info_reply.isin_id) == 0)
             {
@@ -100,6 +102,7 @@ struct DataStorage
         else
         {
             symbol2BestBidAsk[symbol].isin_id = info_reply.isin_id;
+            symbol2BestBidAsk[symbol].min_step_price = info_reply.min_step_price;
             if (l1.count(info_reply.isin_id) == 0)
             {
                 l1[info_reply.isin_id] = &symbol2BestBidAsk[symbol];
@@ -263,21 +266,22 @@ class Spreader : public VNode
         if (si->is_ready && si->bid < si->ask)
         {
             //std::cout << "[node] " << si->bid << " " << si->ask << std::endl;
+            //std::cout << "MinStep " << si->min_step_price << std::endl;
 
             if (position > 0)
             {
                 buy->Update(0, 0);
-                sell->Update(si->ask + spread * 1000000, max_buy);
+                sell->Update(si->ask + spread * si->min_step_price, max_buy);
             }
             else if (position < 0)
             {
-                buy->Update(si->bid - spread * 1000000, max_sell);
+                buy->Update(si->bid - spread * si->min_step_price, max_sell);
                 sell->Update(0, 0);
             }
             else
             {
-                buy->Update(si->bid - spread * 1000000, max_buy);
-                sell->Update(si->ask + spread * 1000000, max_sell);
+                buy->Update(si->bid - spread * si->min_step_price, max_buy);
+                sell->Update(si->ask + spread * si->min_step_price, max_sell);
             }
         }
         else
@@ -325,11 +329,12 @@ class Spreader : public VNode
         int32_t position = buy->total_trades - sell->total_trades;
         int64_t profit = buy->total_money + sell->total_money + position * (si->bid + si->ask) / 2;
         int64_t total_trades = buy->total_trades + sell->total_trades;
-        profit /= 1000000;
+        profit /= si->min_step_price;
         printf("@@@@@@@@@@@@@@@@@@@@@@@@@@@ Profit = %ld, position = %d, total_trades = %ld @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n",
                profit, position, total_trades);
     }
 };
+
 
 struct RootNode : public VNode
 {
@@ -350,13 +355,13 @@ struct RootNode : public VNode
 
     void Initialization()
     {
-        Spreader *spreader = new Spreader("Si-12.16", *storage, *out);
+        Spreader *spreader = new Spreader("USD000UTSTOM", *storage, *out);
         //Spreader *spreader2 = new Spreader("RTS-12.16", *storage, *out);
         //SpreaderSber *spreader2 = new SpreaderSber(*storage, *out);
         //Spreader *spreader2 = new Spreader("SBRF-12.16", *storage, *out);
         //Spreader *spreader3 = new Spreader("RTS-12.16", *storage, *out);
 
-        spreader->SetProperty("spread", "1");
+        spreader->SetProperty("spread", "4");
         //spreader2->SetProperty("spread", "10");
         //spreader2->SetProperty("spread", "15");
         //spreader3->SetProperty("spread", "100");
@@ -572,6 +577,7 @@ struct ScriptBroker : public BasePipe
                                                                                    .ext_id = new_order.ext_id,
                                                                                    .external_ext_id = new_ext_id}));*/
                 //LogToFile(new_order.to_csv());
+                //std::cout << new_order << std::endl;
                 WriteMsgType(NEW_ORDER);
                 out.write((char *)&new_order, sizeof(new_order));
             }
@@ -586,6 +592,8 @@ struct ScriptBroker : public BasePipe
                 CancelOrder cancel_order;
                 orders.read((char *)&cancel_order, sizeof(cancel_order));
                 cancel_order.ts = ts + GetOrderDelay();
+
+                //std::cout << cancel_order << std::endl;
                 WriteMsgType(CANCEL_ORDER);
                 out.write((char *)&cancel_order, sizeof(cancel_order));
             }
@@ -639,6 +647,7 @@ struct ScriptBroker : public BasePipe
                 //std::cout << "diff         " << (session->ts_new_reply - session->ts_new) / 10 << std::endl;
                 //getchar();
                 orderid2session.insert(std::pair<int64_t, OrderSession *>((int64_t)new_reply.orderid, session));
+                //std::cout << new_reply << std::endl;
                 session->order->ReplyNew(new_reply);
             }
             else if (msg_type == CANCEL_REPLY_MSG)
@@ -647,6 +656,7 @@ struct ScriptBroker : public BasePipe
                 in.read((char *)&cancel_reply, sizeof(cancel_reply));
                 //OrderSession *session
                 OrderSession *session = orderid2session[cancel_reply.orderid];
+                //std::cout << cancel_reply << std::endl;
                 session->order->ReplyCancel(cancel_reply);
             }
             else if (msg_type == TRADE_MSG)
@@ -681,6 +691,7 @@ struct ScriptBroker : public BasePipe
                 {
                     //idea about reserved ext_id
                     //global info (usually for storage)
+
                     storage.ReplyInstrumentInfo(info_reply);
                 }
             }

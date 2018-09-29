@@ -231,6 +231,11 @@ struct ScriptOrder
         desired_amount = amount;
     }
 
+    void Zero()
+    {
+        Update(0, 0);
+    }
+
     void ReplyNew(NewReply &new_reply)
     {
         assert(state.status == PENDING_NEW);

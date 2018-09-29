@@ -40,6 +40,8 @@
 
 #define ORDERID_MULT 100000
 
+#define ONE_SEC 10000000
+
 //send input to script and get answers + pass timestamps
 #define FREE 0
 #define PENDING_NEW 1
@@ -269,6 +271,21 @@ struct MktDataL1
     MktDataL1() : bid(0), ask(0), is_ready(0)
     {
     }
+
+    int IsReady()
+    {
+        if (is_ready && bid > 0 && ask > bid)
+        {
+            return 1;
+        }
+        return 0;
+    }
+
+    int64_t price(int64_t first, int64_t second)
+    {
+        return first + second * min_step_price;
+    }
+
 } __attribute__((packed, aligned(4)));
 
 struct InstrumentInfoRequest

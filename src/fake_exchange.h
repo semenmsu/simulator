@@ -95,6 +95,7 @@ class FakeExchange : BasePipe
         CancelOrder cancel_order;
         in.read((char *)&cancel_order, sizeof(cancel_order));
         T t;
+        t.ext_id = 0;
         t.action = 0;
         t.orderid = cancel_order.orderid;
         t.user_code = cancel_order.user_code;

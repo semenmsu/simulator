@@ -33,6 +33,7 @@ class Simulator : public BasePipe
     int64_t start_time = 0;
     int64_t stop_time = 0;
     int64_t current_time = 0;
+    int64_t last_time_update = 0;
     std::string date = "";
     std::stringstream in;
     std::stringstream out;
@@ -405,6 +406,15 @@ class Simulator : public BasePipe
         {
             to.In() << out.rdbuf(); //copy
         }
+
+        //update current_time
+        int slice_ms = 10;
+        if ((last_time_update + slice_ms * 10000) > current_time)
+        {
+            current_time = last_time_update + slice_ms * 10000;
+        }
+        last_time_update = current_time;
+
         return to;
     }
 

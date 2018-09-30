@@ -20,19 +20,27 @@
 #include "root_node.h"
 
 using std::placeholders::_1;
+using std::placeholders::_2;
 
 //One way direction
-struct ProtocolSocket
+struct VirtSocket
 {
     std::stringstream *stream;
-    std::stringstream *in;
 
-    std::function<void(NewReply)> new_reply_function;
     std::function<void(int64_t)> timestamp_function;
     std::function<void(MktDataL1 &)> mkt_data_l1_function;
     std::function<void(InstrumentInfoReply &)> instrument_info_reply_function;
 
-    ProtocolSocket(std::stringstream *stream)
+    std::function<void(NewReply &)> new_reply_function;
+    std::function<void(CancelReply &)> cancel_reply_function;
+    std::function<void(Trade &)> trade_reply_function;
+
+    // void HandleNewOrder(ScriptOrder *pointer, NewOrder &new_order)
+    std::function<void(ScriptOrder *, NewOrder &)> new_order_function;
+    std::function<void(ScriptOrder *, CancelOrder &)> cancel_order_function;
+    std::function<void(ScriptOrder *, InstrumentInfoRequest &)> instrument_info_request_function;
+
+    VirtSocket(std::stringstream *stream)
     {
         this->stream = stream;
     }
@@ -43,14 +51,68 @@ struct ProtocolSocket
         timestamp_function = cb;
     }
 
+    template <class T>
+    void On(T &t, void (T::*f)(int64_t))
+    {
+        timestamp_function = std::bind(f, &t, _1);
+    }
+
     void On(std::function<void(MktDataL1 &)> cb)
     {
         mkt_data_l1_function = cb;
     }
 
+    template <class T>
+    void On(T &t, void (T::*f)(MktDataL1 &))
+    {
+        mkt_data_l1_function = std::bind(f, &t, _1);
+    }
+
     void On(std::function<void(InstrumentInfoReply &)> cb)
     {
         instrument_info_reply_function = cb;
+    }
+
+    template <class T>
+    void On(T &t, void (T::*f)(InstrumentInfoReply &))
+    {
+        instrument_info_reply_function = std::bind(f, &t, _1);
+    }
+
+    template <class T>
+    void On(T &t, void (T::*f)(NewReply &))
+    {
+        new_reply_function = std::bind(f, &t, _1);
+    }
+
+    template <class T>
+    void On(T &t, void (T::*f)(CancelReply &))
+    {
+        cancel_reply_function = std::bind(f, &t, _1);
+    }
+
+    template <class T>
+    void On(T &t, void (T::*f)(Trade &))
+    {
+        trade_reply_function = std::bind(f, &t, _1);
+    }
+
+    template <class T>
+    void On(T &t, void (T::*f)(ScriptOrder *, NewOrder &))
+    {
+        new_order_function = std::bind(f, &t, _1, _2);
+    }
+
+    template <class T>
+    void On(T &t, void (T::*f)(ScriptOrder *, CancelOrder &))
+    {
+        cancel_order_function = std::bind(f, &t, _1, _2);
+    }
+
+    template <class T>
+    void On(T &t, void (T::*f)(ScriptOrder *, InstrumentInfoRequest &))
+    {
+        instrument_info_request_function = std::bind(f, &t, _1, _2);
     }
 
     //system
@@ -89,8 +151,62 @@ struct ProtocolSocket
         //std::cout << "[broker] INSTRUMENT_INFO_REPLY\n";
         InstrumentInfoReply info_reply;
         stream->read((char *)&info_reply, sizeof(info_reply));
-        std::cout << "receive Instrument Info Reply" << std::endl;
+        //std::cout << "receive Instrument Info Reply" << std::endl;
         instrument_info_reply_function(info_reply);
+    }
+
+    void ReadNewReplyMsg()
+    {
+        NewReply new_reply;
+        stream->read((char *)&new_reply, sizeof(new_reply));
+        new_reply_function(new_reply);
+    }
+
+    void ReadCancelRepyMsg()
+    {
+        CancelReply cancel_reply;
+        stream->read((char *)&cancel_reply, sizeof(cancel_reply));
+        cancel_reply_function(cancel_reply);
+    }
+
+    void ReadTradeMsg()
+    {
+        Trade trade;
+        stream->read((char *)&trade, sizeof(trade));
+        trade_reply_function(trade);
+    }
+
+    void ReadNewOrder()
+    {
+        ScriptOrder *pointer;
+        stream->read((char *)&pointer, sizeof(pointer));
+
+        NewOrder new_order;
+        stream->read((char *)&new_order, sizeof(new_order));
+
+        new_order_function(pointer, new_order);
+    }
+
+    void ReadCancelOrder()
+    {
+        ScriptOrder *pointer;
+        stream->read((char *)&pointer, sizeof(pointer));
+
+        CancelOrder cancel_order;
+        stream->read((char *)&cancel_order, sizeof(cancel_order));
+
+        cancel_order_function(pointer, cancel_order);
+    }
+
+    void ReadInstrumentInfoRequest()
+    {
+        //std::cout << "READ REQUEST INFO" << std::endl;
+        ScriptOrder *pointer;
+        stream->read((char *)&pointer, sizeof(pointer));
+        InstrumentInfoRequest info_request;
+        stream->read((char *)&info_request, sizeof(info_request));
+
+        instrument_info_request_function(pointer, info_request);
     }
 
     void Do()
@@ -110,30 +226,27 @@ struct ProtocolSocket
             case INSTRUMENT_INFO_REPLY:
                 ReadInstrumentInfoReply();
                 break;
+            case NEW_REPLY_MSG:
+                ReadNewReplyMsg();
+                break;
+            case CANCEL_REPLY_MSG:
+                ReadCancelRepyMsg();
+                break;
+            case TRADE_MSG:
+                ReadTradeMsg();
+                break;
+            case NEW_ORDER:
+                ReadNewOrder();
+                break;
+            case CANCEL_ORDER:
+                ReadCancelOrder();
+                break;
+            case INSTRUMENT_INFO_REQUEST:
+                ReadInstrumentInfoRequest();
+                break;
+            default:
+                break;
             }
-            /*
-            if (msg_type == NEW_REPLY_MSG)
-            {
-            }
-            else if (msg_type == CANCEL_REPLY_MSG)
-            {
-            }
-            else if (msg_type == TRADE_MSG)
-            {
-            }
-            else if (msg_type == TIMESTAMP_MSG)
-            {
-            }
-            else if (msg_type == MKT_DATA_L1)
-            {
-            }
-            else if (msg_type == INSTRUMENT_INFO_REPLY)
-            {
-            }
-            else
-            {
-
-            }*/
         }
     }
 };
@@ -168,7 +281,8 @@ struct ScriptBroker : public BasePipe
     RootNode *root;
     std::ofstream log;
 
-    ProtocolSocket *socket;
+    VirtSocket *socket;
+    VirtSocket *orders_socket;
 
     ScriptBroker()
     {
@@ -183,37 +297,116 @@ struct ScriptBroker : public BasePipe
         CreateStorage();
     }
 
+    OrderSession *GetSessionByExtId(int id)
+    {
+        return extid2session[id];
+    }
+
     //Handlers
     void HandleTimestamp(int64_t ts)
     {
-        std::cout << "receive ts " << ts << std::endl;
+        //std::cout << "receive ts " << ts << std::endl;
+
+        root->UpdateTime(ts);
     }
 
-    void HandleMktDataL1(MktDataL1 mkt_data)
+    void HandleMktDataL1(MktDataL1 &mkt_data)
     {
-        std::cout << "mkt_data " << mkt_data.bid << " " << mkt_data.ask << std::endl;
+        //std::cout << "mkt_data " << mkt_data.bid << " " << mkt_data.ask << std::endl;
+
+        storage.UpdateL1(mkt_data);
     }
 
-    void HandleInstrumentInfoReply(InstrumentInfoReply &reply)
+    void HandleInstrumentInfoReply(InstrumentInfoReply &info_reply)
     {
         std::cout << "Instrument Info Reply " << std::endl;
         //getchar();
+        if (info_reply.ext_id != 0)
+        {
+            OrderSession *session = extid2session[info_reply.ext_id];
+            session->order->ReplyInstrumentInfo(info_reply);
+            extid2session.erase(info_reply.ext_id);
+        }
+        else
+        {
+            //idea about reserved ext_id
+            //global info (usually for storage)
+            storage.ReplyInstrumentInfo(info_reply);
+        }
     }
 
-    
+    void HandleNewReplyMsg(NewReply &new_reply)
+    {
+        OrderSession *session = extid2session[new_reply.ext_id];
+        new_reply.ext_id = session->ext_id;
+        session->ts_new_reply = new_reply.ts;
+        orderid2session.insert(std::pair<int64_t, OrderSession *>((int64_t)new_reply.orderid, session));
+        session->order->ReplyNew(new_reply);
+    }
+
+    void HandleCancelReplyMsg(CancelReply &cancel_reply)
+    {
+        OrderSession *session = orderid2session[cancel_reply.orderid];
+        session->order->ReplyCancel(cancel_reply);
+    }
+
+    void HandleTradeMsg(Trade &trade)
+    {
+        OrderSession *session = orderid2session[trade.orderid];
+        LogToFile(trade.to_csv());
+        session->order->ReplyTrade(trade);
+    }
+
+    void HandleNewOrder(ScriptOrder *pointer, NewOrder &new_order)
+    {
+
+        OrderSession *session = &order2session[pointer];
+        new_order.ext_id = GenereateExtId();
+        new_order.ts = ts + GetOrderDelay();
+        session->order = pointer;
+        session->external_ext_id = new_order.ext_id;
+        session->ext_id = new_order.ext_id;
+        session->ts_new = ts;
+        extid2session.insert(std::pair<int64_t, OrderSession *>((int64_t)new_order.ext_id, session));
+
+        WriteMsgType(NEW_ORDER);
+        out.write((char *)&new_order, sizeof(new_order));
+    }
+
+    void HandleCancelOrder(ScriptOrder *pointer, CancelOrder &cancel_order)
+    {
+        cancel_order.ts = ts + GetOrderDelay();
+
+        WriteMsgType(CANCEL_ORDER);
+        out.write((char *)&cancel_order, sizeof(cancel_order));
+    }
+
+    void HandleInstrumentInfoRequest(ScriptOrder *pointer, InstrumentInfoRequest &info_request)
+    {
+        info_request.ext_id = GenereateExtId();
+        OrderSession *session = &order2session[pointer];
+        session->order = pointer;
+        extid2session.insert(std::pair<int64_t, OrderSession *>((int64_t)info_request.ext_id, session));
+
+        WriteMsgType(INSTRUMENT_INFO_REQUEST);
+        out.write((char *)&info_request, sizeof(info_request));
+    }
+
     void ConnectProtocolSocket()
     {
-        socket = new ProtocolSocket(&in);
-        //
-        //std::function<void(int)> f_add_display2 = std::bind(&Foo::print_add, foo, _1);
-        std::function<void(int64_t)> h_timestamp = std::bind(&ScriptBroker::HandleTimestamp, this, _1);
-        std::function<void(MktDataL1 &)> h_mktdata = std::bind(&ScriptBroker::HandleMktDataL1, this, _1);
-        std::function<void(InstrumentInfoReply &)> h_istrument_info_reply = std::bind(&ScriptBroker::HandleInstrumentInfoReply, this, _1);
-        //f_add_display2(2);
-        //std::function<void(int64_t)> handle_ts(HandleTimestamp);
-        socket->On(h_timestamp);
-        socket->On(h_mktdata);
-        socket->On(h_istrument_info_reply);
+        socket = new VirtSocket(&in);
+        orders_socket = new VirtSocket(&orders);
+
+        socket->On(*this, &ScriptBroker::HandleTimestamp);
+        socket->On(*this, &ScriptBroker::HandleMktDataL1);
+        socket->On(*this, &ScriptBroker::HandleInstrumentInfoReply);
+        socket->On(*this, &ScriptBroker::HandleNewReplyMsg);
+        socket->On(*this, &ScriptBroker::HandleCancelReplyMsg);
+        socket->On(*this, &ScriptBroker::HandleTradeMsg);
+
+        orders_socket->On(*this, &ScriptBroker::HandleNewOrder);
+        orders_socket->On(*this, &ScriptBroker::HandleCancelOrder);
+        orders_socket->On(*this, &ScriptBroker::HandleInstrumentInfoRequest);
     }
 
     void CreateRootScript()
@@ -438,15 +631,15 @@ struct ScriptBroker : public BasePipe
 
     void Do()
     {
+        socket->Do();
         //ReadInput(); //read input stream
 
-        //root->Do();
+        root->Do();
 
         //ReadOrders(); //read output stream
+        orders_socket->Do();
 
-        //Print();
-
-        socket->Do();
+        Print();
     }
 
     void Print()
